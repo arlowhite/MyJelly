@@ -99,7 +99,7 @@ class Jelly(Creature):
     scale = NumericProperty(1.0)
 
     def __init__(self, **kwargs):
-        self.ctrl_points = []
+
         self.texture = None
         self._flip_texture_vertical = False
 
@@ -201,7 +201,7 @@ class Jelly(Creature):
         # self.mesh.vertices = verts
 
         # Tests
-        #self.x += 5
+        #self.x += 1
         #self.size = (self.width-1, self.height-1)
         #self.scale*=1.1
 
@@ -211,46 +211,6 @@ class Jelly(Creature):
         if self.x > self.parent.width:
             self.x = 0
 
-
-
-    def on_touch_down(self, touch):
-        # Get all touch events, even if not within this Widget
-        x, y = touch.x, touch.y
-
-        # Other Widgets, e.g. Button need us to return False to work
-        if not self.collide_point(x, y):
-            # Jelly should not care about touches outside itself
-            return False
-
-        # See if control points or other children are handling
-        handled = super(Jelly, self).on_touch_down(touch)
-        if not handled:
-            ctrl_pt = ControlPoint()
-            ctrl_pt.center = (x, y)
-            self.add_widget(ctrl_pt)
-            self.ctrl_points.append(ctrl_pt)
-            return True
-
-        else:
-            # Should be False
-            return handled
-
-    def finalize_control_points(self):
-        # Add averaged point
-        # TODO consider whether user needs the ability to move it
-        # Generate vertices
-
-        x_mean = 0
-        y_mean = 0
-        for pt in self.ctrl_points:
-            x_mean += pt.center_x
-            y_mean += pt.center_y
-
-        x_mean /= len(self.ctrl_points)
-        y_mean /= len(self.ctrl_points)
-
-        # Lock point to mesh...
-        self.ctrl_points[0].get_vertice_coords()
 
     def on_size(self, widget, new_size):
         if hasattr(self, '_mesh_scale'):

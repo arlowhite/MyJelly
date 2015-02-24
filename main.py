@@ -11,6 +11,7 @@ from kivy.graphics import Canvas, Color, Line
 from kivy.vector import Vector
 
 from visuals.creatures import Jelly
+from visuals.anim_constructors import AnimationConstructor
 from visuals.drawn_visual import Path, ControlPoint
 #from behaviors.basic import FollowPath
 
@@ -56,6 +57,7 @@ class MyJellyGame(Widget):
         Clock.unschedule(self.clock_tick)
 
     def on_done_pressed(self):
+        # FIXME
         self.jelly.finalize_control_points()
 
 
@@ -70,16 +72,20 @@ class MyJellyApp(App):
         # canvas.after instead?
         game = self.root
 
+
         jelly = Jelly()
         #jelly.center = game.center
-        jelly.pos = (200, 200)
+        #jelly.pos = (200, 200)
         #center
 
         #size 1/2 window
+        ac = AnimationConstructor(jelly)
+        ac.pos = (50, 50)
+
 
         #self.add_ally(jelly)
         game.jelly = jelly
-        game.add_widget(jelly)
+        game.add_widget(ac)
         game.start()
 
 

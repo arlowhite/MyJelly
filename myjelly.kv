@@ -19,7 +19,8 @@
 
 
 <ControlPoint>:
-    size: 16, 16
+    size: 24, 24
+    drawn_size: 16
     hole_diam: 8
 
     canvas:
@@ -32,12 +33,11 @@
         StencilUse:
             func_op: 'notequal'
 
-
         Color:
             rgba: 0, 0, 0, 0.7
         Ellipse:
-            size: self.size
-            pos: self.pos
+            size: self.drawn_size, self.drawn_size
+            pos: self.center_x-self.drawn_size/2, self.center_y-self.drawn_size/2
 
 
         Color:
@@ -50,14 +50,14 @@
         Color:
             rgba: 69/255.0, 209/255.0, 205/255.0, 0.7
 
+        # Vertical hair
         Rectangle:
             pos: self.center_x-1, self.y -1
             size: 2, self.height + 2
+        # Horizontal hair
         Rectangle:
             pos: self.x-1, self.center_y - 1
             size: self.width + 2, 2
 
-
         StencilPop
-
 

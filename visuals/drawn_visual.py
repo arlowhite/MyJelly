@@ -1,7 +1,11 @@
 __author__ = 'awhite'
 
 from kivy.uix.widget import Widget
+#from kivy.uix.scatter import Scatter
+from kivy.uix.relativelayout import RelativeLayout
 from kivy.graphics import Line, Canvas, Color
+
+
 class Path:
     "Visual indication of a path to follow"
 
@@ -52,21 +56,32 @@ class Path:
 
 
 class ControlPoint(Widget):
+    "A visual point used in Mesh animation setup"
 
     def on_touch_down(self, touch):
+        print('mypos', self.pos, 'touchpos', touch.pos)
+        # convert to center?
         if self.collide_point(*touch.pos):
             touch.grab(self)
 
             return True
 
     def on_touch_move(self, touch):
+        pos = touch.pos
         # If grabbing this point and the move is within bounds of parent, move the point
         if touch.grab_current is self:
-            if self.parent.collide_point(*touch.pos):
-                self.center = touch.pos
-            else:
-                # TODO Flash red parent boundary
-                pass
+            # pos was converted to_local
+            # Restrict to parent
+            # 0 if < 0, parent.right if > parent.right, otherwise x
+
+            # Parents boundary in local coords
+            p_right, p_top = self.parent.to_local(self.parent.right, self.parent.top)
+            self.center_x = min(max(0, pos[0]), p_right)
+            self.center_y = min(max(0, pos[1]), p_top)
+
+            return True
+
+        return False
 
 
     def on_touch_up(self, touch):
