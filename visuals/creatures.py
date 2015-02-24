@@ -7,12 +7,15 @@ from kivy.core.image import Image as CoreImage
 from kivy.core.image import ImageLoader
 from kivy.uix.widget import Widget
 from kivy.properties import NumericProperty
+from kivy.animation import Animation
+from kivy.clock import Clock
 from kivy.graphics import StencilUse
 from kivy.graphics.instructions import InstructionGroup
-
 from kivy.clock import Clock
 
 from drawn_visual import ControlPoint
+
+import random
 
 
 # Don't think I want event dispatch, not needed for every creature and will be too much
@@ -99,10 +102,20 @@ class Jelly(Creature):
 
     scale = NumericProperty(1.0)
 
+    bell_horizontal = NumericProperty(0.0)
+    bell_vertical = NumericProperty(0.0)
+
+    # in a bit, then out
+    bell_horiz_transition_out = 'in_back'
+    bell_vert_transition_out = 'out_cubic'
+    bell_horiz_transition_in = 'in_sine'
+    bell_vert_transition_in = 'out_back'
+
     def __init__(self, **kwargs):
 
         self.texture = None
         self._flip_texture_vertical = False
+        self._bell_animation = None
 
         super(Jelly, self).__init__(**kwargs)
 
@@ -197,6 +210,59 @@ class Jelly(Creature):
 
         self.mesh.vertices = vertices
         self.mesh.indices = indices
+
+    def set_bell_animation_vertices(self, in_vertices, out_vertices):
+        "Set the Bell Mesh vertices at inward and outward position."
+        if len(in_vertices) != len(out_vertices):
+            raise ValueError('Unequal vertice lengths!')
+
+        if len(in_vertices) != len(self.mesh.vertices)/2:
+            raise ValueError('Animation vertices not half the Mesh.vertices')
+
+        self._in_bell_vertices = in_vertices
+        self._out_bell_vertices = out_vertices
+
+    def animate_bell(self, dt=None):
+        if self._bell_animation:
+            self._bell_animation.cancel_all(self)
+
+        a = Animation(bell_horizontal=1.0, t=Jelly.bell_horiz_transition_out, duration=1.0)
+        a &= Animation(bell_vertical=1.0, t=Jelly.bell_vert_transition_out, duration=1.0)
+
+        a += (Animation(bell_horizontal=0.0, t=Jelly.bell_horiz_transition_in, duration=0.5)
+              & Animation(bell_vertical=0.0, t=Jelly.bell_vert_transition_in, duration=0.5))
+
+        # TODO Random pauses in-between
+
+        a.bind(on_complete=self.bell_pulse_complete)
+        a.start(self)
+        self._bell_animation = a
+
+    def bell_pulse_complete(self, anim_seq, widget):
+        Clock.schedule_once(self.animate_bell, random.triangular(0.3, 2.0, 0.5))
+
+    def on_bell_vertical(self, widget, vert):
+        # Do all work in one event function for efficency (bell_horizontal should have been updated before this.
+        # TODO: Measure performance. Numpy math? Kivy Matrix math?
+
+        horiz = self.bell_horizontal
+
+        in_verts = self._in_bell_vertices
+        out_verts = self._out_bell_vertices
+
+        mesh = self.mesh
+        verts = mesh.vertices
+        # Skip central point, Go through by 2's
+        for x in range(0, len(in_verts), 2):
+            x_coord = (out_verts[x]-in_verts[x]) * horiz + in_verts[x]
+            y = x+1
+            y_coord = (out_verts[y]-in_verts[y]) * vert + in_verts[y]
+
+            verts[x*2] = x_coord
+            verts[x*2 + 1] = y_coord
+
+        mesh.vertices = verts
+
 
     def update_creature(self):
         # self.vertices[5] += 1

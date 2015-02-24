@@ -3,6 +3,7 @@ __author__ = 'awhite'
 #from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.widget import Widget
 from kivy.graphics import Translate, Rectangle
+from kivy.animation import Animation
 
 from .drawn_visual import ControlPoint
 
@@ -11,7 +12,15 @@ from .drawn_visual import ControlPoint
 # TODO Padding so can pickup ControlPoint on edge
 
 
+class JellyAnimation:
+    "Animates Mesh vertices"
+
+    # log to upper-right
+    # x**# down
+
+
 class AnimationConstructor(Widget):
+    "Visual animation constructor"
 
     def __init__(self, widget, **kwargs):
         if not hasattr(widget, 'mesh'):
@@ -69,6 +78,22 @@ class AnimationConstructor(Widget):
         for i, cp in enumerate(self.ctrl_points):
             # First point is the central one above, so add one
             cp.attach_mesh(m, i+1)
+
+    def finalize_point_destinations(self):
+        print('dests')
+        # TODO Maybe inner-position another animation construction state?
+        m = self.widget.mesh
+        # Central point
+        in_pos = [m.vertices[0], m.vertices[1]]
+        out_pos = list(in_pos)
+
+        for cp in self.ctrl_points:
+            out_pos.extend(cp.pos)
+            in_pos.extend(cp.original_mesh_pos)
+
+        # TODO Decouple Animated Mesh from Jelly
+        self.widget.set_bell_animation_vertices(in_pos, out_pos)
+
 
     # From RelativeLayout, maybe make SimpleRelativeLayout?
     def to_local(self, x, y, **k):

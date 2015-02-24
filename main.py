@@ -23,6 +23,8 @@ class MyJellyGame(Widget):
 
         self.started = False
 
+        self.pressed_once = False
+
     def clock_tick(self, dt):
         self.jelly.update_creature()
 
@@ -47,15 +49,23 @@ class MyJellyGame(Widget):
         if self.started:
             return
 
-        Clock.schedule_interval(self.clock_tick, 1/60.0)
+        #Clock.schedule_interval(self.clock_tick, 1/60.0)
         self.started = True
 
     def pause(self):
         Clock.unschedule(self.clock_tick)
 
     def on_done_pressed(self):
-        # FIXME
-        self.anim_constr.finalize_control_points()
+
+        if not self.pressed_once:
+            self.anim_constr.finalize_control_points()
+
+        else:
+            self.anim_constr.finalize_point_destinations()
+
+            self.jelly.animate_bell()
+
+        self.pressed_once = True
 
 
 class MyJellyApp(App):
