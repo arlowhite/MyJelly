@@ -8,6 +8,7 @@ from kivy.core.image import ImageLoader
 from kivy.uix.widget import Widget
 from kivy.properties import NumericProperty
 from kivy.graphics import StencilUse
+from kivy.graphics.instructions import InstructionGroup
 
 from kivy.clock import Clock
 
@@ -106,6 +107,31 @@ class Jelly(Creature):
         super(Jelly, self).__init__(**kwargs)
 
 
+        # The texture coordinate dimensions I choose could be anything if I just Scale() instead of
+        # recalculating them for size changes, so I'll just use the Image.size
+
+        w = self.texture_img.width
+        h = self.texture_img.height
+
+
+        # Initial simple vertices
+        vertices = []
+        # u,v pos are 0 to 1.0
+        vertices.extend((w / 2, h / 2, 0.5, 0.5))
+        vertices.extend((0, 0, 0, 0))
+        vertices.extend((0, h, 0, 1))
+        vertices.extend((w, h, 1, 1))
+        vertices.extend((w, 0, 1, 0))
+
+        # tex_coords [u, v, u + w, v, u + w, y + h, u, y + h]
+        # No effect: tex_coords=(0.0, 0.0, 1.0, 0.0, 1.0, -1.0, 0.0, -1.0)
+
+        # mode: Can be one of points, line_strip, line_loop, lines, triangles, triangle_strip or triangle_fan.
+
+        self.update_mesh_vertices(vertices)
+        self.on_scale(self, self.scale)
+
+
         #self.bind(size=self.on_size)
 
 
@@ -150,47 +176,27 @@ class Jelly(Creature):
     def draw_creature(self):
         self.load_image()
 
-        # The texture coordinate dimensions I choose could be anything if I just Scale() instead of
-        # recalculating them for size changes, so I'll just use the Image.size
-
-        w = self.texture_img.width
-        h = self.texture_img.height
-
-
-        # Initial simple vertices
-        vertices = []
-        # u,v pos are 0 to 1.0
-        vertices.extend((w / 2, h / 2, 0.5, 0.5))
-        vertices.extend((0, 0, 0, 0))
-        vertices.extend((0, h, 0, 1))
-        vertices.extend((w, h, 1, 1))
-        vertices.extend((w, 0, 1, 0))
-
-        #        vertices.extend((0,0,0,0))
-
-        #self.to_local()
-        indices = range(len(vertices) / 4)
-        indices.append(1)  # Complete with the 1st outer point
-
-        # tex_coords [u, v, u + w, v, u + w, y + h, u, y + h]
-        # No effect: tex_coords=(0.0, 0.0, 1.0, 0.0, 1.0, -1.0, 0.0, -1.0)
-
-        # mode: Can be one of points, line_strip, line_loop, lines, triangles, triangle_strip or triangle_fan.
-
-        PushMatrix()
-        if self._flip_texture_vertical:
-            self._mesh_trans = Translate(0, 0)
-            Scale(1, -1, 1)
-
         # Control size without recalculating vertices
         self._mesh_scale = Scale(1, 1, 1)
 
-        self.mesh = Mesh(vertices=vertices, indices=indices, mode='triangle_fan', texture=self.texture)
-        PopMatrix()
-
-        self.on_scale(self, self.scale)
+        self.mesh = Mesh(mode='triangle_fan', texture=self.texture)
 
 
+    def update_mesh_vertices(self, vertices):
+        "Create/Recreate mesh, indices loops around to 2nd vertex for you"
+
+        # TODO u,v coords don't seem to be affected by Scale when changed, need to invert coords
+        if self._flip_texture_vertical:
+            for i in range(0, len(vertices), 4):
+                # v coord
+                v = vertices[i+3]
+                vertices[i+3] = 1-v
+
+        indices = range(len(vertices)/4)
+        indices.append(1)
+
+        self.mesh.vertices = vertices
+        self.mesh.indices = indices
 
     def update_creature(self):
         # self.vertices[5] += 1

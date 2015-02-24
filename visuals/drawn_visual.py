@@ -58,8 +58,15 @@ class Path:
 class ControlPoint(Widget):
     "A visual point used in Mesh animation setup"
 
+    def __init__(self, **kwargs):
+        super(ControlPoint, self).__init__(**kwargs)
+
+        self.mesh = None
+        self.original_mesh_pos = (0, 0)
+        self.vertex_index = -1
+
+
     def on_touch_down(self, touch):
-        print('mypos', self.pos, 'touchpos', touch.pos)
         # convert to center?
         if self.collide_point(*touch.pos):
             touch.grab(self)
@@ -98,10 +105,24 @@ class ControlPoint(Widget):
             # and accept the last up
             return True
 
-    def get_vertice_coords(self):
+    def on_pos(self, widget, new_pos):
+        if self.mesh:
+            i = self.vertex_index*4
+            verts = self.mesh.vertices
+            verts[i] = self.center_x
+            verts[i+1] = self.center_y
+            self.mesh.vertices = verts
+
+
+    def attach_mesh(self, mesh, vertex_index):
+        "Attach to the Mesh so that when this point moves, it changes the specified mesh vertice"
+        self.original_mesh_pos = (self.center_x, self.center_y)
+        self.mesh = mesh
+        self.vertex_index = vertex_index
+
+
+    def calc_vertice_coords(self):
         "Get the coordinates used by Mesh.vertices for this point"
-        a = self.to_local(self.center_x, self.center_y)
-        b = self.to_widget(self.center_x, self.center_y)
-        print(a)
-        print(b)
+
+        return (self.center_x, self.center_y, self.center_x/self.parent.width, self.center_y/self.parent.height)
 

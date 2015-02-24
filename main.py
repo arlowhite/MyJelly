@@ -23,9 +23,6 @@ class MyJellyGame(Widget):
 
         self.started = False
 
-
-
-
     def clock_tick(self, dt):
         self.jelly.update_creature()
 
@@ -58,7 +55,7 @@ class MyJellyGame(Widget):
 
     def on_done_pressed(self):
         # FIXME
-        self.jelly.finalize_control_points()
+        self.anim_constr.finalize_control_points()
 
 
 class MyJellyApp(App):
@@ -84,6 +81,8 @@ class MyJellyApp(App):
 
 
         #self.add_ally(jelly)
+        # TODO Better object organization
+        game.anim_constr = ac
         game.jelly = jelly
         game.add_widget(ac)
         game.start()

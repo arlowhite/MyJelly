@@ -35,7 +35,18 @@ class AnimationConstructor(Widget):
         self._trans.xy = pos
 
 
+    def calc_verticies(self):
+        "Calculate Mesh.vertices from active ControlPoints"
+        verts = []
+
+        for cp in self.ctrl_points:
+            verts.extend(cp.calc_vertice_coords())
+
+        return verts
+
     def finalize_control_points(self):
+        print('final points')
+
         # Add averaged point
         # TODO consider whether user needs the ability to move it
         # Generate vertices
@@ -49,8 +60,15 @@ class AnimationConstructor(Widget):
         x_mean /= len(self.ctrl_points)
         y_mean /= len(self.ctrl_points)
 
-        # Lock point to mesh...
-        self.ctrl_points[0].get_vertice_coords()
+        verts = [x_mean, y_mean, x_mean/self.width, y_mean/self.height]
+        verts.extend(self.calc_verticies())
+
+        self.widget.update_mesh_vertices(verts)
+        m = self.widget.mesh
+
+        for i, cp in enumerate(self.ctrl_points):
+            # First point is the central one above, so add one
+            cp.attach_mesh(m, i+1)
 
     # From RelativeLayout, maybe make SimpleRelativeLayout?
     def to_local(self, x, y, **k):

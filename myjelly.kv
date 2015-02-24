@@ -5,8 +5,8 @@
     Label:
         font_size: 20
         # FIXME Not sure why offscreen so much
-        x: root.x + 100
-        top: root.top - 10
+        x: self.parent.x + 100
+        top: self.parent.top
         text: "Click points around the bell"
 
     Button:
@@ -14,7 +14,7 @@
         right: root.right
         font_size: '24sp'
         text: "Done"
-        on_press: root.on_done_pressed
+        on_press: self.parent.on_done_pressed()
 
 
 
