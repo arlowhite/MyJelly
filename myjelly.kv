@@ -17,8 +17,98 @@
         on_press: self.parent.on_done_pressed()
 
 
+<JellySelectionScreen>:
+    ActionBar:
+        text: 'foo'
+
+        #ActionPrevious:
+        #ActionButton
+
+    # TODO Gridlayout for bigger screens?
+    # TODO List selection stuff instead?
+
+    ScrollView:
+        GridLayout:
+            id: jelly_grid
+        # TODO Increase based on screen size
+            cols: 1
+
+
+<JellyAnimationConstructorScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+
+        ActionBar:
+            top: root.top
+            size_hint_y: None
+
+            ActionView:
+
+                ActionPrevious:
+                    title: 'Jelly Animator'
+                    on_press: root.manager.current = 'JellySelection'
+
+                ActionButton:
+                    text: 'Outline Bell'
+
+                ActionButton:
+                    text: 'Open Bell'
+
+                ActionButton:
+                    text: 'test'
+                    icon: 'atlas://data/images/defaulttheme/previous_normal'
+                    #text: 'Closed Bell'
+
+
+
+        BoxLayout:
+            orientation: 'vertical'
+
+            Carousel:
+                loop: True
+
+                size_hint_y: None
+                height: cm(1)
+
+                WrappingLabel:
+                    text: "Click points around the Jelly's bell."
+                    #text_size: root.width, None
+
+                    on_texture_size: print('text size')
+                WrappingLabel:
+                    text: "Move points to opened bell position."
+                WrappingLabel:
+                    text: "(Optional) Move points to closed position."
+
+# Could put within a scatter
+# Unlock to move it around, zoom for precision, maybe later...
+            AnimationConstructor:
+                id: animation_constructor
+
+
+<WrappingLabel@Label>:
+    size_hint_y: None
+    text_size: self.width, None
+    height: self.texture_size[1]
+    halign: 'center'
+    valign: 'top'
+
+
+<JellySelectButton>:
+
+    on_release: app.open_animation_constructor(self.jelly_data)
+
+    Label:
+        text: 'Jelly IMAGE'
+
+
+
+
+
+
 
 <ControlPoint>:
+# FIXME Use cm(), mm(), dp(), sp()
     size: 24, 24
     drawn_size: 16
     hole_diam: 8

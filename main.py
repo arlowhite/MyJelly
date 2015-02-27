@@ -3,18 +3,18 @@ __author__ = 'awhite'
 import kivy
 kivy.require('1.8.0')
 
+from kivy.config import Config
+Config.set('graphics', 'fullscreen', '0')
+
 from kivy.app import App
 from kivy.uix.widget import Widget
 from kivy.clock import Clock
 
-from kivy.graphics import Canvas, Color, Line
-from kivy.vector import Vector
-
-from visuals.creatures import Jelly
-from visuals.anim_constructors import AnimationConstructor
-from visuals.drawn_visual import Path, ControlPoint
 #from behaviors.basic import FollowPath
 
+from uix.screens import *
+from uix.elements import *
+from visuals.anim_constructors import AnimationConstructor
 
 class MyJellyGame(Widget):
 
@@ -70,32 +70,52 @@ class MyJellyGame(Widget):
 
 class MyJellyApp(App):
     def build(self):
-        game = MyJellyGame()
+        sm = JellyScreenManager()
 
-        return game
+        # TODO show env if has Jelly
+        selection = JellySelectionScreen(name="JellySelection")
+        # FIXME Hardcoded, load from local storage
+        selection.display_jellies([JellyData()])
+        sm.add_widget(selection)
+        self.screen_manager = sm  # Could use root, but this is more clear
+        return sm
 
-    def on_start(self):
-        # FIXME Is this called on resume? Best place for this code
-        # canvas.after instead?
-        game = self.root
+    # def on_start(self):
+    #     # FIXME Is this called on resume? Best place for this code
+    #     # canvas.after instead?
+    #     game = self.root
+    #
+    #
+    #     jelly = Jelly()
+    #     #jelly.center = game.center
+    #     #jelly.pos = (200, 200)
+    #     #center
+    #
+    #     #size 1/2 window
+    #     ac = AnimationConstructor(jelly)
+    #     ac.pos = (50, 50)
+    #
+    #
+    #     #self.add_ally(jelly)
+    #     # TODO Better object organization
+    #     game.anim_constr = ac
+    #     game.jelly = jelly
+    #     game.add_widget(ac)
+    #     game.start()
+
+    def open_animation_constructor(self, jelly):
+        sm = self.screen_manager
+        if not sm.has_screen('JellyAnimationConstructor'):
+            s = JellyAnimationConstructorScreen(name = 'JellyAnimationConstructor')
+            sm.add_widget(s)
+
+        sm.current = 'JellyAnimationConstructor'
+        # switch_to destroys old screen
+        #sm.switch_to(s, direction='left')
+        ac = sm.current_screen
+        ac.set_jelly_data(JellyData())
 
 
-        jelly = Jelly()
-        #jelly.center = game.center
-        #jelly.pos = (200, 200)
-        #center
-
-        #size 1/2 window
-        ac = AnimationConstructor(jelly)
-        ac.pos = (50, 50)
-
-
-        #self.add_ally(jelly)
-        # TODO Better object organization
-        game.anim_constr = ac
-        game.jelly = jelly
-        game.add_widget(ac)
-        game.start()
 
 
 

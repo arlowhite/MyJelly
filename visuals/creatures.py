@@ -232,8 +232,6 @@ class Jelly(Creature):
         a += (Animation(bell_horizontal=0.0, t=Jelly.bell_horiz_transition_in, duration=0.5)
               & Animation(bell_vertical=0.0, t=Jelly.bell_vert_transition_in, duration=0.5))
 
-        # TODO Random pauses in-between
-
         a.bind(on_complete=self.bell_pulse_complete)
         a.start(self)
         self._bell_animation = a

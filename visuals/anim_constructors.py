@@ -3,7 +3,10 @@ __author__ = 'awhite'
 #from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.widget import Widget
 from kivy.graphics import Translate, Rectangle
+from kivy.uix.image import Image
 from kivy.animation import Animation
+from kivy.event import EventDispatcher
+from kivy.properties import ObjectProperty, ListProperty
 
 from .drawn_visual import ControlPoint
 
@@ -18,30 +21,58 @@ class JellyAnimation:
     # log to upper-right
     # x**# down
 
+class MeshAnimator(EventDispatcher):
+    """Animates a Mesh's vertices from one set to another in a loop."""
+
+    def __init__(self, **kwargs):
+        super(MeshAnimator, self).__init__(**kwargs)
+
+        self.vertices_states = []
+
+
+    def add_vertices(self, vertices, duration=1.0, delay=None):
+        """Add a set of vertices.
+        duration: Seconds taken to reach vertices.
+        delay: Seconds to delay before beginning next animation
+
+        duration & delay can be number, function, or generator
+        """
+        num = len(self.vertices_states)
+        if num > 0 and num != len(vertices):
+            raise ValueError('Mismatched number of vertices: %d vs %d'%(num, len(vertices)))
+
+        self.vertices_states.append( (vertices, duration, delay) )
+
+
 
 class AnimationConstructor(Widget):
-    "Visual animation constructor"
+    """Visual animation constructor.
+    Shows a single Mesh texture in the center.
+    Allows manipulation of ControlPoints within its size.
 
-    def __init__(self, widget, **kwargs):
-        if not hasattr(widget, 'mesh'):
-            raise ValueError('Widget has no Mesh to operate on')
+    """
 
-        super(AnimationConstructor, self).__init__(**kwargs)
+    jelly_data = ObjectProperty(None)
+    ctrl_points = ListProperty([])
 
-        with self.canvas.before:
-            self._trans = Translate(xy = self.pos)
 
-        self.ctrl_points = []
+    def on_jelly_data(self, widget, data):
 
-        self.widget = widget
-        self.size = widget.size
-        self.add_widget(widget)
+        # Fit image/Mesh without distortion?
+        # need mipmap=True again?
+        img = Image(texture=data.bell_image.texture, keep_ratio=True, allow_stretch=True)
+        self.image = img
 
-        with self.canvas.before:
-            Rectangle(size=self.size)
+        self.add_widget(img)
 
     def on_pos(self, widget, pos):
-        self._trans.xy = pos
+        #self._trans.xy = pos
+        self.image.pos = pos
+
+    def on_size(self, widget, size):
+        # Fit Image/Mesh within
+        self.image.size = size
+        # TODO Control points should stay aligned with image
 
 
     def calc_verticies(self):
@@ -93,6 +124,11 @@ class AnimationConstructor(Widget):
 
         # TODO Decouple Animated Mesh from Jelly
         self.widget.set_bell_animation_vertices(in_pos, out_pos)
+
+    def move_control_points(self, vertices):
+        "Move all of the Control Points to the specified x1, y1, x2, y2, ... vertices."
+
+        pass
 
 
     # From RelativeLayout, maybe make SimpleRelativeLayout?
