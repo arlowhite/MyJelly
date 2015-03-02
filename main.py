@@ -71,13 +71,16 @@ class MyJellyGame(Widget):
 class MyJellyApp(App):
     def build(self):
         sm = JellyScreenManager()
-
-        # TODO show env if has Jelly
-        selection = JellySelectionScreen(name="JellySelection")
-        # FIXME Hardcoded, load from local storage
-        selection.display_jellies([JellyData()])
-        sm.add_widget(selection)
         self.screen_manager = sm  # Could use root, but this is more clear
+
+        # # TODO show env if has Jelly
+        # selection = JellySelectionScreen(name="JellySelection")
+        # # FIXME Hardcoded, load from local storage
+        # selection.display_jellies([JellyData()])
+        # sm.add_widget(selection)
+
+        self.open_animation_constructor()
+
         return sm
 
     # def on_start(self):
@@ -103,7 +106,7 @@ class MyJellyApp(App):
     #     game.add_widget(ac)
     #     game.start()
 
-    def open_animation_constructor(self, jelly):
+    def open_animation_constructor(self, jelly=None):
         sm = self.screen_manager
         if not sm.has_screen('JellyAnimationConstructor'):
             s = JellyAnimationConstructorScreen(name = 'JellyAnimationConstructor')
@@ -122,5 +125,3 @@ class MyJellyApp(App):
 if __name__ == '__main__':
     MyJellyApp().run()
 
-# Loop?
-# Everyone mooves, then check interactions

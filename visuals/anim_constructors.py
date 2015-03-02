@@ -1,9 +1,10 @@
 __author__ = 'awhite'
 
-#from kivy.uix.relativelayout import RelativeLayout
-from kivy.uix.widget import Widget
-from kivy.graphics import Translate, Rectangle
+from kivy.graphics import Translate, Rectangle, Line, Color
 from kivy.uix.image import Image
+from kivy.uix.scatter import ScatterPlane, Scatter
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.stencilview import StencilView
 from kivy.animation import Animation
 from kivy.event import EventDispatcher
 from kivy.properties import ObjectProperty, ListProperty
@@ -44,8 +45,14 @@ class MeshAnimator(EventDispatcher):
         self.vertices_states.append( (vertices, duration, delay) )
 
 
+class FloatLayoutStencilView(FloatLayout, StencilView):
+    pass
 
-class AnimationConstructor(Widget):
+# Issues:
+# Idea: Currently, ControlPoints scale with Scatter, could reverse/reduce this with an opposite Scale maybe.
+# ScatterPlane works by changing collide_point,
+
+class AnimationConstructor(Scatter):
     """Visual animation constructor.
     Shows a single Mesh texture in the center.
     Allows manipulation of ControlPoints within its size.
@@ -54,25 +61,64 @@ class AnimationConstructor(Widget):
 
     jelly_data = ObjectProperty(None)
     ctrl_points = ListProperty([])
+    # Image can be moved and zoomed by user to allow more precise ControlPoint placement.
+    #image_unlocked = BooleanProperty(False)
+
+    def __init__(self, **kwargs):
+        self._image_size_set = False
+        self.control_point_bbox = [0, 0, 1, 1]
+        super(AnimationConstructor, self).__init__(**kwargs)
 
 
     def on_jelly_data(self, widget, data):
-
-        # Fit image/Mesh without distortion?
+        # self has default size at this point, sizing must be done in on_size
+        # Image will be fit within size once in self.on_size
         # need mipmap=True again?
         img = Image(texture=data.bell_image.texture, keep_ratio=True, allow_stretch=True)
+
         self.image = img
+        img.bind(norm_image_size=self.on_norm_image_size)
 
         self.add_widget(img)
 
-    def on_pos(self, widget, pos):
-        #self._trans.xy = pos
-        self.image.pos = pos
 
+    # TODO Get rid of? just visualizing image
+    def on_norm_image_size(self, widget, size):
+        # Calculating the Image bounding box coordinates to limit ControlPoints to
+        # pos/center is in window coordinates, just use size
+        half_w = self.width / 2.0
+        half_h = self.height / 2.0
+        half_iw = size[0] / 2.0
+        half_ih = size[1] / 2.0
+
+        bbox = self.control_point_bbox
+        # Bottom-Left bound
+        bbox[0] = half_w - half_iw
+        bbox[1] = half_h - half_ih
+        # Upper-right bound
+        bbox[2] = half_w + half_iw
+        bbox[3] = half_h + half_ih
+
+        print('on_norm_image_size', size, 'control_point_bbox', bbox)
+
+
+    # Size does not change when scaling Scatter, only when window changes
     def on_size(self, widget, size):
+        if size[1] == 0.0:
+            print('ignoring zero height', size)
+            return
+
         # Fit Image/Mesh within
-        self.image.size = size
+        #self.image.size = size
         # TODO Control points should stay aligned with image
+        print(self.__class__.__name__, 'on_size', size)
+        # FIXME Updating Image.size messes up ControlPoint references
+        # Only do this once
+        if self._image_size_set:
+            return
+        self.image.size = size
+        self._image_size_set = True
+
 
 
     def calc_verticies(self):
@@ -131,53 +177,66 @@ class AnimationConstructor(Widget):
         pass
 
 
-    # From RelativeLayout, maybe make SimpleRelativeLayout?
-    def to_local(self, x, y, **k):
-        return x - self.x, y - self.y
+    def collide_point(self, x, y):
+        # Make it behave like ScatterPlane, but restricted to parent
+        return self.parent.collide_point(x, y)
 
     def on_touch_down(self, touch):
-        x, y = touch.x, touch.y
 
+        # if self.image_unlocked:
+            # Defer to Scatter implementation
+            # return super(AnimationConstructor, self).on_touch_down(touch)
+
+        # Otherwise manipulate ControlPoints instead of Scatter doing anything
+        # handled = super(AnimationConstructor, self).on_touch_down(touch)
+        # if handled:
+        #     return True
+
+
+        x, y = touch.x, touch.y
         # Other Widgets, e.g. Button need us to return False to work
         if not self.collide_point(x, y):
-            # Don't care up clicks outside self
             return False
 
-        touch.push()
-        touch.apply_transform_2d(self.to_local)
+
         handled = super(AnimationConstructor, self).on_touch_down(touch)
 
         if not handled:
-            # TODO Edit mode config?
+            touch.push()
+            touch.apply_transform_2d(self.to_local)
+
             # Create a new ControlPoint
             ctrl_pt = ControlPoint()
 
-            #ctrl_pt.center = self.to_widget(x, y, relative=True)
             # Use transformed coordinates
             ctrl_pt.center = (touch.x, touch.y)
+
+            # TODO Decide whether to add to scatter or not, maybe make this inherit Scatter?
             self.add_widget(ctrl_pt)
             # TODO Create ControlPoint container of some kind
             self.ctrl_points.append(ctrl_pt)
+
+            touch.pop()
             return True
 
-        touch.pop()
         return handled
 
-    def on_touch_move(self, touch):
-        x, y = touch.x, touch.y
-        touch.push()
-        touch.apply_transform_2d(self.to_local)
-        ret = super(AnimationConstructor, self).on_touch_move(touch)
-        touch.pop()
-        return ret
-
-    def on_touch_up(self, touch):
-        x, y = touch.x, touch.y
-        touch.push()
-        touch.apply_transform_2d(self.to_local)
-        ret = super(AnimationConstructor, self).on_touch_up(touch)
-        touch.pop()
-        return ret
+        # Using Scatter now, need to think about, not needed I think
+    # def on_touch_move(self, touch):
+    #     x, y = touch.x, touch.y
+    #     touch.push()
+    #     touch.apply_transform_2d(self.to_local)
+    #     ret = super(AnimationConstructor, self).on_touch_move(touch)
+    #     touch.pop()
+    #     return ret
+    #
+    # def on_touch_up(self, touch):
+    #     x, y = touch.x, touch.y
+    #     touch.push()
+    #     touch.apply_transform_2d(self.to_local)
+    #     ret = super(AnimationConstructor, self).on_touch_up(touch)
+    #     touch.pop()
+    #     return ret
 
 
 

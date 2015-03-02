@@ -72,9 +72,6 @@
 
                 WrappingLabel:
                     text: "Click points around the Jelly's bell."
-                    #text_size: root.width, None
-
-                    on_texture_size: print('text size')
                 WrappingLabel:
                     text: "Move points to opened bell position."
                 WrappingLabel:
@@ -82,8 +79,64 @@
 
 # Could put within a scatter
 # Unlock to move it around, zoom for precision, maybe later...
-            AnimationConstructor:
-                id: animation_constructor
+# FIXME Can't draw lower left, bind size? look at examples
+# ScatterPlane does what I want, but takes all touch events
+# ScatterPlaneLayout is in 1.9.0
+
+# This extends a ScatterLayout and is configured in KV below
+            FloatLayoutStencilView:
+
+                canvas.after:
+                    Color:
+                        rgb: 1, 1, 1
+                    Line:
+                        rectangle: self.x, self.y, self.width, self.height
+
+#                StencilView:
+#                    pos: self.parent.pos
+#                    size: self.parent.size
+
+                AnimationConstructor:
+                    id: animation_constructor
+
+                    # Unlock/Lock Scatter
+                    do_translation: move_resize_switch.active
+                    do_scale: move_resize_switch.active
+
+                    pos: self.parent.pos
+
+
+
+            BoxLayout:
+                size_hint_y: None
+
+                Label:
+                    text: "Move or Resize Image"
+
+                Switch:
+                    id: move_resize_switch
+                    size_hint_x: None
+
+
+<AnimationConstructor>:
+    # Scatter outline
+#    canvas.after:
+#        Color:
+#            rgb: 0, 0, 1
+#        Line:
+#            rectangle: self.x, self.y, self.width, self.height
+
+#                    Color:
+#                        rgb: 0, 1, 0
+#                    Line:
+#                        rectangle: self.bbox[0][0], self.bbox[0][1], self.bbox[1][0], self.bbox[1][0]
+
+    do_rotation: False
+    #scale: 0.8
+    scale_min: 0.25
+    scale_max: 5.0
+    auto_bring_to_front: False
+    do_collide_after_children: False
 
 
 <WrappingLabel@Label>:
@@ -109,18 +162,20 @@
 
 <ControlPoint>:
 # FIXME Use cm(), mm(), dp(), sp()
-    size: 24, 24
-    drawn_size: 16
-    hole_diam: 8
+    size: cm(1.6), cm(1.6)
+    drawn_size: cm(1.0)
+    hole_diam: cm(0.6)
 
     canvas:
         StencilPush
         Ellipse:
-            size: self.hole_diam, self.hole_diam
+            size: root.hole_diam, root.hole_diam
             pos: self.center_x-self.hole_diam/2, self.center_y-self.hole_diam/2
 
         # Makes Stencil create a hole
+        # TODO Not clipped by StencilView
         StencilUse:
+            #Can be one of ‘never’, ‘less’, ‘equal’, ‘lequal’, ‘greater’, ‘notequal’, ‘gequal’ or ‘always’. default equal
             func_op: 'notequal'
 
         Color:
