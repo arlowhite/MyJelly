@@ -79,6 +79,9 @@ class ControlPoint(Widget):
         print(self.pos)
 
     def on_touch_down(self, touch):
+        if self.disabled:
+            return False
+
         if super(ControlPoint, self).on_touch_down(touch):
             return True
 
@@ -89,6 +92,11 @@ class ControlPoint(Widget):
             return True
 
     def on_touch_move(self, touch):
+        # Need to return False for Scatter to work when touching this point
+        # Not sure why True is returned by Kivy when disabled anyway.
+        if self.disabled:
+            return False
+
         if super(ControlPoint, self).on_touch_move(touch):
             return True
 
@@ -124,6 +132,9 @@ class ControlPoint(Widget):
 
 
     def on_touch_up(self, touch):
+        if self.disabled:
+            return False
+
         if super(ControlPoint, self).on_touch_up(touch):
             return True
 

@@ -100,8 +100,7 @@
                     id: animation_constructor
 
                     # Unlock/Lock Scatter
-                    do_translation: move_resize_switch.active
-                    do_scale: move_resize_switch.active
+                    move_resize: move_resize_switch.active
 
                     pos: self.parent.pos
 
@@ -133,6 +132,8 @@
 #                        rectangle: self.bbox[0][0], self.bbox[0][1], self.bbox[1][0], self.bbox[1][0]
 
     do_rotation: False
+    do_translation: False
+    do_scale: False
     #scale: 0.8
     scale_min: 0.25
     scale_max: 5.0

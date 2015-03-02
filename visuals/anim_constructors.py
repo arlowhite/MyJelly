@@ -11,7 +11,7 @@ from kivy.uix.stencilview import StencilView
 from kivy.uix.carousel import Carousel
 from kivy.animation import Animation
 from kivy.event import EventDispatcher
-from kivy.properties import ObjectProperty, ListProperty, BoundedNumericProperty
+from kivy.properties import ObjectProperty, ListProperty, BoundedNumericProperty, BooleanProperty
 
 from .drawn_visual import ControlPoint
 
@@ -67,7 +67,7 @@ class AnimationConstructor(Scatter):
     ctrl_points = ListProperty([])
     animation_step = BoundedNumericProperty(0, min=0)
     # Image can be moved and zoomed by user to allow more precise ControlPoint placement.
-    #image_unlocked = BooleanProperty(False)
+    move_resize = BooleanProperty(False)
 
     def __init__(self, **kwargs):
         self.mesh_mode = 'triangle_fan'
@@ -296,6 +296,13 @@ class AnimationConstructor(Scatter):
     def collide_point(self, x, y):
         # Make it behave like ScatterPlane, but restricted to parent
         return self.parent.collide_point(x, y)
+
+    def on_move_resize(self, widget, enabled):
+        self.do_translation = enabled
+        self.do_scale = enabled
+        for cp in self.ctrl_points:
+            cp.disabled = enabled
+
 
     def on_touch_down(self, touch):
 
