@@ -4,6 +4,7 @@ from kivy.uix.widget import Widget
 from kivy.graphics import Line, Canvas, Color
 from kivy.properties import NumericProperty
 from kivy.animation import Animation
+from kivy.vector import Vector
 
 
 class Path:
@@ -65,16 +66,17 @@ class ControlPoint(Widget):
     def __init__(self, **kwargs):
         self.mesh = None
         self.vertex_index = -1
+        self.mesh_attached = False
+
+        # Saved positions
         self.positions = {0:(0,0)}
         self.position_index = 0
         self._animation = None
+        self._detach_after_animation = False
 
         super(ControlPoint, self).__init__(**kwargs)
 
         print(self.pos)
-
-
-
 
     def on_touch_down(self, touch):
         if super(ControlPoint, self).on_touch_down(touch):
@@ -90,18 +92,31 @@ class ControlPoint(Widget):
         if super(ControlPoint, self).on_touch_move(touch):
             return True
 
-        pos = touch.pos
+        x, y = touch.pos[0], touch.pos[1]
         # If grabbing this point and the move is within bounds of parent, move the point
         if touch.grab_current is self:
             # pos was converted to_local
             # Restrict to parent
             # 0 if < 0, parent.right if > parent.right, otherwise x
 
-            bbox = self.parent.control_point_bbox
-            # Parents boundary in local coords
-            p_right, p_top = self.parent.to_local(self.parent.right, self.parent.top)
-            self.center_x = min(max(bbox[0], pos[0]), bbox[2])
-            self.center_y = min(max(bbox[1], pos[1]), bbox[3])
+            # TODO Fix Hardcoded logic to animation step 0
+            if self.position_index == 0:
+                bbox = self.parent.control_point_bbox
+                # Parents boundary in local coords
+                self.center_x = min(max(bbox[0], x), bbox[2])
+                self.center_y = min(max(bbox[1], y), bbox[3])
+
+            else:
+                origin = self.positions[0]
+                # Only allow moving if within this distance of first point
+                distance_limit = self.parent.bbox_diagonal / 2.5
+                pos0v = Vector(origin)
+                if pos0v.distance((x, y)) < distance_limit:
+                    self.center = (x, y)
+                else:
+                    # Place as far as allowed
+                    v = (Vector((x,y)) - Vector(origin)).normalize()
+                    self.center = pos0v + v*distance_limit
 
             return True
 
@@ -128,29 +143,42 @@ class ControlPoint(Widget):
     def on_pos(self, widget, new_pos):
         # Copy values instead of reference to center
         self.positions[self.position_index] = (self.center_x, self.center_y)
-        #print('ControlPoint.on_pos', new_pos)
-        if self.mesh:
+        # print('ControlPoint.on_pos', new_pos)
+        # if self.parent:
+        #     print('ControlPoint vertice coords', self.calc_vertice_coords())
+
+        if self.mesh and self.vertex_index != -1:
             i = self.vertex_index*4
             verts = self.mesh.vertices
-            verts[i] = self.center_x
-            verts[i+1] = self.center_y
+            x, y, u, v = self.calc_vertex_coords()
+            verts[i], verts[i+1] = x, y
+            if not self.mesh_attached:
+                # Also update u, v
+                verts[i+2], verts[i+3] = u, v
+
+            # Trigger update
             self.mesh.vertices = verts
 
-    def move_to_position_index(self, index, animate=True):
+    def move_to_position_index(self, index, animate=True, detach_mesh_after = False):
         if index < 0:
             raise ValueError('index < 0')
 
         self.position_index = index
 
         if index in self.positions:
-            # No public method to re-use Animation, so just re-create
-            if self._animation is not None:
-                self._animation.cancel(self)
+            if animate:
+                # No public method to re-use Animation, so just re-create
+                if self._animation is not None:
+                    self._animation.cancel(self)
 
-            a = Animation(center=self.positions[index], duration=0.7)
-            a.bind(on_complete=self._on_animate_complete, on_start=self._on_animate_start)
-            a.start(self)
-            self._animation = a
+                self._detach_after_animation = detach_mesh_after
+                a = Animation(center=self.positions[index], duration=0.7)
+                a.bind(on_complete=self._on_animate_complete, on_start=self._on_animate_start)
+                a.start(self)
+                self._animation = a
+
+            else:
+                self.center = self.positions[index]
         else:
             # Position index not set before, save current position at index
             self.positions[index] = (self.center_x, self.center_y)
@@ -160,24 +188,42 @@ class ControlPoint(Widget):
 
     def _on_animate_complete(self, anim, widget):
         self.disabled = False
+        if self._detach_after_animation:
+            self.attach_mesh(False)
+            self._detach_after_animation = False
+
         self._animation = None
 
-    def on_disabled(self, instance, value):
-        print('on_disabled', value)
+    # def on_disabled(self, instance, value):
+    #     print('on_disabled', value)
 
-    def attach_mesh(self, mesh, vertex_index):
-        "Attach to the Mesh so that when this point moves, it changes the specified mesh vertice"
-        # TODO I think remove responsibility for tracking this from this Class
-        self.original_mesh_pos = (self.center_x, self.center_y)
-        self.mesh = mesh
-        self.vertex_index = vertex_index
+    def attach_mesh(self, mesh_attached):
+        """Attach point movement to mesh so that ControlPoint's pos change changes vertex tex_coords.
+        Otherwise, both tex_coords and u, v are changed so no distortion occurs
+        """
+        self.mesh_attached = mesh_attached
 
-    def detach_mesh(self):
-        self.mesh = None
-        self.vertex_index = -1
+    def get_tex_coords(self, pos_index=None):
+        if pos_index is None:
+            # Current location
+            return self.center_x, self.center_y
+        else:
+            return self.positions[pos_index]
 
-    def calc_vertice_coords(self):
+    def calc_vertex_coords(self, pos_index=None):
         "Get the coordinates used by Mesh.vertices for this point"
 
-        return (self.center_x, self.center_y, self.center_x/self.parent.width, self.center_y/self.parent.height)
+        x, y = self.get_tex_coords(pos_index)
 
+        bbox = self.parent.control_point_bbox
+        # # Parents boundary in local coords
+        # self.center_x = min(max(bbox[0], x), bbox[2])
+        # self.center_y = min(max(bbox[1], y), bbox[3])
+        #w, h = self.parent.image.norm_image_size
+        w = bbox[4]
+        h = bbox[5]
+
+        #tx = x - bbox[0]
+        #ty = y - bbox[1]
+        # FIXME Detect need to texture flip
+        return (x, y, x/w, 1.0 - y/h)

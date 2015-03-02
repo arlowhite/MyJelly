@@ -7,7 +7,7 @@ class JellyData:
     def __init__(self):
         self.bell_image_filename = 'media/images/holland_jelly.png'
         # Lazy-load?
-        self.bell_image = CoreImage(self.bell_image_filename, mipmap=True)
+        #self.bell_image = CoreImage(self.bell_image_filename, mipmap=True)
 
 
 

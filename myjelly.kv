@@ -49,18 +49,18 @@
                     on_press: root.manager.current = 'JellySelection'
 
                 ActionButton:
-                    text: 'test'
                     icon: 'atlas://data/images/defaulttheme/previous_normal'
                     #text: 'Closed Bell'
                     on_press: carousel.load_previous()
+                    disabled: carousel.index == 0
 
 
                 ActionButton:
-                    text: 'test'
                     icon: 'atlas://data/images/defaulttheme/previous_normal'
                     on_press: carousel.load_next()
                     #on_texture: self.texture.flip_horizontal()
                     #text: 'Closed Bell'
+                    disabled: carousel.index == len(carousel.slides) - 1
 
 
 
@@ -69,6 +69,8 @@
 
             FixedCarousel:
                 id: carousel
+                # Darkens instruction text
+                #disabled: len(animation_constructor.ctrl_points) < 3
                 #loop: True
                 size_hint_y: None
                 height: cm(1.0)
@@ -175,14 +177,14 @@
 
 
         Color:
-            rgba: 0, 0, 0, 0.7
+            rgba: 0, 0, 0, 0.5
         Ellipse:
             size: self.drawn_size, self.drawn_size
             pos: self.center_x-self.drawn_size/2, self.center_y-self.drawn_size/2
 
 
         Color:
-            rgba: 1, 1, 1, 0.9
+            rgba: 1, 1, 1, 0.7
         Ellipse:
             size: self.hole_diam + 4, self.hole_diam+4
             pos: self.center_x-self.hole_diam/2 -2, self.center_y-self.hole_diam/2-2
