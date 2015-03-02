@@ -3,6 +3,7 @@ __author__ = 'awhite'
 from kivy.uix.widget import Widget
 from kivy.graphics import Line, Canvas, Color
 from kivy.properties import NumericProperty
+from kivy.animation import Animation
 
 
 class Path:
@@ -63,10 +64,14 @@ class ControlPoint(Widget):
 
     def __init__(self, **kwargs):
         self.mesh = None
-        self.original_mesh_pos = (0, 0)
         self.vertex_index = -1
+        self.positions = {0:(0,0)}
+        self.position_index = 0
+        self._animation = None
 
         super(ControlPoint, self).__init__(**kwargs)
+
+        print(self.pos)
 
 
 
@@ -121,6 +126,8 @@ class ControlPoint(Widget):
             return True
 
     def on_pos(self, widget, new_pos):
+        # Copy values instead of reference to center
+        self.positions[self.position_index] = (self.center_x, self.center_y)
         #print('ControlPoint.on_pos', new_pos)
         if self.mesh:
             i = self.vertex_index*4
@@ -129,6 +136,34 @@ class ControlPoint(Widget):
             verts[i+1] = self.center_y
             self.mesh.vertices = verts
 
+    def move_to_position_index(self, index, animate=True):
+        if index < 0:
+            raise ValueError('index < 0')
+
+        self.position_index = index
+
+        if index in self.positions:
+            # No public method to re-use Animation, so just re-create
+            if self._animation is not None:
+                self._animation.cancel(self)
+
+            a = Animation(center=self.positions[index], duration=0.7)
+            a.bind(on_complete=self._on_animate_complete, on_start=self._on_animate_start)
+            a.start(self)
+            self._animation = a
+        else:
+            # Position index not set before, save current position at index
+            self.positions[index] = (self.center_x, self.center_y)
+
+    def _on_animate_start(self, anim, widget):
+        self.disabled = True
+
+    def _on_animate_complete(self, anim, widget):
+        self.disabled = False
+        self._animation = None
+
+    def on_disabled(self, instance, value):
+        print('on_disabled', value)
 
     def attach_mesh(self, mesh, vertex_index):
         "Attach to the Mesh so that when this point moves, it changes the specified mesh vertice"

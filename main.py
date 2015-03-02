@@ -14,6 +14,7 @@ from kivy.clock import Clock
 
 from uix.screens import *
 from uix.elements import *
+from uix.hacks_fixes import *
 from visuals.anim_constructors import AnimationConstructor
 
 class MyJellyGame(Widget):

@@ -49,14 +49,17 @@
                     on_press: root.manager.current = 'JellySelection'
 
                 ActionButton:
-                    text: 'Outline Bell'
+                    text: 'test'
+                    icon: 'atlas://data/images/defaulttheme/previous_normal'
+                    #text: 'Closed Bell'
+                    on_press: carousel.load_previous()
 
-                ActionButton:
-                    text: 'Open Bell'
 
                 ActionButton:
                     text: 'test'
                     icon: 'atlas://data/images/defaulttheme/previous_normal'
+                    on_press: carousel.load_next()
+                    #on_texture: self.texture.flip_horizontal()
                     #text: 'Closed Bell'
 
 
@@ -64,26 +67,25 @@
         BoxLayout:
             orientation: 'vertical'
 
-            Carousel:
-                loop: True
-
+            FixedCarousel:
+                id: carousel
+                #loop: True
                 size_hint_y: None
-                height: cm(1)
+                height: cm(1.0)
 
                 WrappingLabel:
                     text: "Click points around the Jelly's bell."
                 WrappingLabel:
                     text: "Move points to opened bell position."
-                WrappingLabel:
-                    text: "(Optional) Move points to closed position."
 
-# Could put within a scatter
-# Unlock to move it around, zoom for precision, maybe later...
-# FIXME Can't draw lower left, bind size? look at examples
-# ScatterPlane does what I want, but takes all touch events
-# ScatterPlaneLayout is in 1.9.0
+                BoxLayout:
+                    orientation: 'horizontal'
+                    WrappingLabel:
+                        text: "(Optional) Move points to closed position."
 
-# This extends a ScatterLayout and is configured in KV below
+                    Switch:
+                        size_hint_x: None
+
             FloatLayoutStencilView:
 
                 canvas.after:
@@ -91,10 +93,6 @@
                         rgb: 1, 1, 1
                     Line:
                         rectangle: self.x, self.y, self.width, self.height
-
-#                StencilView:
-#                    pos: self.parent.pos
-#                    size: self.parent.size
 
                 AnimationConstructor:
                     id: animation_constructor
@@ -105,6 +103,7 @@
 
                     pos: self.parent.pos
 
+                    animation_step: carousel.index
 
 
             BoxLayout:
@@ -144,7 +143,8 @@
     text_size: self.width, None
     height: self.texture_size[1]
     halign: 'center'
-    valign: 'top'
+    # FIXME No effect
+    valign: 'middle'
 
 
 <JellySelectButton>:
@@ -156,12 +156,7 @@
 
 
 
-
-
-
-
 <ControlPoint>:
-# FIXME Use cm(), mm(), dp(), sp()
     size: cm(1.6), cm(1.6)
     drawn_size: cm(1.0)
     hole_diam: cm(0.6)
@@ -177,6 +172,7 @@
         StencilUse:
             #Can be one of ‘never’, ‘less’, ‘equal’, ‘lequal’, ‘greater’, ‘notequal’, ‘gequal’ or ‘always’. default equal
             func_op: 'notequal'
+
 
         Color:
             rgba: 0, 0, 0, 0.7

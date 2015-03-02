@@ -5,9 +5,10 @@ from kivy.uix.image import Image
 from kivy.uix.scatter import ScatterPlane, Scatter
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.stencilview import StencilView
+from kivy.uix.carousel import Carousel
 from kivy.animation import Animation
 from kivy.event import EventDispatcher
-from kivy.properties import ObjectProperty, ListProperty
+from kivy.properties import ObjectProperty, ListProperty, BoundedNumericProperty
 
 from .drawn_visual import ControlPoint
 
@@ -61,6 +62,7 @@ class AnimationConstructor(Scatter):
 
     jelly_data = ObjectProperty(None)
     ctrl_points = ListProperty([])
+    animation_step = BoundedNumericProperty(0, min=0)
     # Image can be moved and zoomed by user to allow more precise ControlPoint placement.
     #image_unlocked = BooleanProperty(False)
 
@@ -118,6 +120,22 @@ class AnimationConstructor(Scatter):
             return
         self.image.size = size
         self._image_size_set = True
+
+
+    def on_animation_step(self, widget, step):
+        """What step to activate.
+        0: Position points on image
+        1: Outer Bell
+        2: Closed Bell (Optional)
+        """
+        print('on_animation_step', step)
+
+        for cp in self.ctrl_points:
+            cp.move_to_position_index(step)
+
+        if step==1:
+            # Expand control_point_bbox
+            pass
 
 
 
