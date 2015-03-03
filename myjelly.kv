@@ -111,11 +111,15 @@
                 size_hint_y: None
 
                 Label:
-                    text: "Move or Resize Image"
+                    text: "Move and Resize (pinch)"
 
                 Switch:
                     id: move_resize_switch
                     size_hint_x: None
+
+                ToggleButton:
+                    text: "Animate"
+                    on_state: animation_constructor.preview_animation(self.state=='down')
 
 
 <AnimationConstructor>:

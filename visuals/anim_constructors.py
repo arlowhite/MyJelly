@@ -1,6 +1,9 @@
 __author__ = 'awhite'
 
+import random
+
 from kivy.logger import Logger
+from kivy.clock import Clock
 from kivy.graphics import Translate, Rectangle, Line, Color, Mesh
 from kivy.vector import Vector
 from kivy.core.image import Image as CoreImage
@@ -11,9 +14,10 @@ from kivy.uix.stencilview import StencilView
 from kivy.uix.carousel import Carousel
 from kivy.animation import Animation
 from kivy.event import EventDispatcher
-from kivy.properties import ObjectProperty, ListProperty, BoundedNumericProperty, BooleanProperty
+from kivy.properties import ObjectProperty, ListProperty, BoundedNumericProperty, BooleanProperty, NumericProperty
 
 from .drawn_visual import ControlPoint
+from misc.util import evaluate_thing
 
 # RelativeLayout or Scatter seems overcomplicated and causes issues
 # just do it myself, don't really need to add_widget()
@@ -26,27 +30,145 @@ class JellyAnimation:
     # log to upper-right
     # x**# down
 
+# TODO Need to serialize this into JellyData somehow
 class MeshAnimator(EventDispatcher):
-    """Animates a Mesh's vertices from one set to another in a loop."""
+    """Animates a Mesh's vertices from one set to another in a loop.
+    Programmer should set MeshAnimator.mesh and make sure indices on Mesh are set.
+    """
+
+    # variables that are animated and used to adjust vertices
+    horizontal_fraction = NumericProperty(0.0)
+    vertical_fraction = NumericProperty(0.0)
+
+    # The current step is the animation step animating to, step remains during optionaly delay
+    # As soon as next step starts animating, step is incremented
+    step = NumericProperty(0)
 
     def __init__(self, **kwargs):
+        self.vertices_states = []
+        self.previous_step = 0
+        self._animation = None
+        self._setup = False
         super(MeshAnimator, self).__init__(**kwargs)
 
-        self.vertices_states = []
 
-
-    def add_vertices(self, vertices, duration=1.0, delay=None):
+    def add_vertices(self, vertices, duration=1.0, delay=None,
+                     horizontal_transition='linear', vertical_transition='linear'):
         """Add a set of vertices.
-        duration: Seconds taken to reach vertices.
-        delay: Seconds to delay before beginning next animation
+        duration: Seconds taken to reach vertices at this step.
+        delay: Seconds to delay before beginning next animation after this step.
+        horizontal|vertical_transition: transition to use when transferring to vertices at this step.
 
         duration & delay can be number, function, or generator
         """
         num = len(self.vertices_states)
-        if num > 0 and num != len(vertices):
+        if num > 0 and len(self.vertices_states[0][0]) != len(vertices):
             raise ValueError('Mismatched number of vertices: %d vs %d'%(num, len(vertices)))
 
-        self.vertices_states.append( (vertices, duration, delay) )
+        self.vertices_states.append( (vertices, duration, delay, horizontal_transition, vertical_transition) )
+
+
+    # TODO Maybe remove if not used much
+    def next_step(self):
+        "Get the next step, looping to 0 if at end"
+        step = self.step + 1
+        if step >= len(self.vertices_states):
+            step = 0
+
+        return step
+
+
+    def start_animation(self, step=None):
+        """Start animating to the specified step from the one previous.
+        If not specified, goes to next step (modifying step/previous_step)"""
+
+        # Idea: If needed, could add temporary animation that morphs from current Mesh.vertices
+
+        num_states = len(self.vertices_states)
+        if num_states < 2:
+            # raise instead?
+            return
+
+        if step is None:
+            step = self.next_step()
+
+        prev = step - 1
+        if prev < 0:
+            prev = num_states - 1
+
+        self.previous_step = prev
+        self.step = step
+
+        if not self._setup:
+            # Set initial vertices
+            # Currently, u,v never updated again
+            self.mesh.vertices = list(self.vertices_states[self.previous_step][0])
+
+            self._setup = True
+
+        step = self.vertices_states[self.step]
+        dur = evaluate_thing(step[1])
+
+        # Setting properties will set vertices to previous_step
+        self.horizontal_fraction = 0.0
+        self.vertical_fraction = 0.0
+
+        # Go from 0 to 1 each time, try saving Animation
+        # PERF try keeping Animation instance, need to change transition/duration each time
+        a = Animation(horizontal_fraction=1.0, transition=step[3], duration=dur)
+        a &= Animation(vertical_fraction=1.0, transition=step[4], duration=dur)
+        a.bind(on_complete=self.on_animation_complete)
+        self._animation = a
+        a.start(self)
+
+    def stop_animation(self):
+        if not self._animation:
+            return
+
+        # Don't want to call on_complete
+        self._animation.cancel(self)
+        self._animation = None
+
+
+    def on_animation_complete(self, anim, widget):
+        # Delay after current step
+        delay_thing = self.vertices_states[self.step][2]
+        if delay_thing:
+            Clock.schedule_once(self.start_animation, evaluate_thing(delay_thing))
+
+        else:
+            self.start_animation()
+
+
+    # def on_horizontal_fraction(self, *args):
+    #     print('on_horizontal_fraction', args)
+
+    def on_vertical_fraction(self, widget, vert):
+        # print('on_vertical_fraction', vert)
+
+        # Do all work in one event function for efficency (horizontal should have been updated before this because of creation order.
+        # TODO: Measure performance. Numpy math? Kivy Matrix math?
+
+        horiz = self.horizontal_fraction
+
+        in_verts = self.vertices_states[self.previous_step][0]
+        out_verts = self.vertices_states[self.step][0]
+
+        mesh = self.mesh
+        verts = mesh.vertices
+        # Skip central point, Go through by 4's
+        # Vertex lists conform to Mesh.vertices
+        for x in range(0, len(in_verts), 4):
+            x_coord = (out_verts[x]-in_verts[x]) * horiz + in_verts[x]
+            y = x+1
+            y_coord = (out_verts[y]-in_verts[y]) * vert + in_verts[y]
+
+            verts[x] = x_coord
+            verts[y] = y_coord
+
+        mesh.vertices = verts
+
+
 
 
 class FloatLayoutStencilView(FloatLayout, StencilView):
@@ -98,6 +220,8 @@ class AnimationConstructor(Scatter):
 
         self.mesh.texture = texture
         self.texture = texture
+        # TODO Position Image center/zoomed by default
+        # Nexus 10 Image is smaller, test density independent
         # TODO Is there any benifit to Image vs Rectangle w/ Texture ?
         img = Image(texture=texture, keep_ratio=True, allow_stretch=True)
         img.bind(norm_image_size=self.on_norm_image_size)
@@ -205,8 +329,7 @@ class AnimationConstructor(Scatter):
                 self.mesh_attached = True
 
 
-        for cp in self.ctrl_points:
-            cp.move_to_position_index(step, detach_mesh_after=step==0)
+        self.move_control_points(step, detach_mesh_after=step==0)
 
         self._previous_step = step
 
@@ -218,7 +341,6 @@ class AnimationConstructor(Scatter):
 
         returns vertices, indices
         """
-
 
         num = len(self.ctrl_points)
         triangle_fan_mode = self.mesh_mode == 'triangle_fan'
@@ -286,11 +408,39 @@ class AnimationConstructor(Scatter):
 
         return verts, indices
 
-    # FIXME Needed?
-    def move_control_points(self, vertices):
-        "Move all of the Control Points to the specified x1, y1, x2, y2, ... vertices."
+    def move_control_points(self, position_index, detach_mesh_after):
+        "Move all of the Control Points to the specified position index"
+        for cp in self.ctrl_points:
+            cp.move_to_position_index(position_index, detach_mesh_after=detach_mesh_after)
 
-        pass
+
+    def preview_animation(self, activate_preview):
+        "Start/Stop animation preview"
+
+        if activate_preview:
+            a = MeshAnimator()
+            a.mesh = self.mesh
+
+            bell_horiz_transition_out = 'in_back'
+            bell_vert_transition_out = 'out_cubic'
+            bell_horiz_transition_in = 'in_sine'
+            bell_vert_transition_in = 'out_back'
+            # TODO delay random.triangular(0.3, 2.0, 0.5)
+
+            # Iterate steps from 0 to the current one
+            for step in range(self.animation_step+1):
+                verts, _ = self.calc_mesh_verticies(step=step, update_mesh=False)
+                a.add_vertices(verts, duration=0.5, horizontal_transition='in_back', vertical_transition='out_cubic')
+
+            self.mesh_animator = a
+            a.start_animation()
+
+        elif self.mesh_animator:
+            self.mesh_animator.stop_animation()
+
+            # Set Mesh.vertices back to current step's
+            self.calc_mesh_verticies(step=self.animation_step)
+
 
 
     def collide_point(self, x, y):
