@@ -101,8 +101,8 @@ class MeshAnimator(EventDispatcher):
 
         if not self._setup:
             # Set initial vertices
-            # Currently, u,v never updated again
-            self.mesh.vertices = list(self.vertices_states[self.previous_step][0])
+            # Currently, u,v come from step 0 and should never be updated again
+            self.mesh.vertices = list(self.vertices_states[0][0])
 
             self._setup = True
 
@@ -186,7 +186,7 @@ class AnimationConstructor(Scatter):
     """
 
     jelly_data = ObjectProperty(None)
-    ctrl_points = ListProperty([])
+    control_points = ListProperty([])
     animation_step = BoundedNumericProperty(0, min=0)
     # Image can be moved and zoomed by user to allow more precise ControlPoint placement.
     move_resize = BooleanProperty(False)
@@ -284,7 +284,7 @@ class AnimationConstructor(Scatter):
         # self.image.size = size
         # self._image_size_set = True
 
-    def on_ctrl_points(self, widget, points):
+    def on_control_points(self, widget, points):
         # If on first animation step, Update mesh to preview Mesh cut
         if self.animation_step == 0 and len(points) >= 3:
             self.calc_mesh_verticies(step = 0)
@@ -323,7 +323,7 @@ class AnimationConstructor(Scatter):
 
             if not self.mesh_attached:
                 # attach before moving to other animation steps
-                for cp in self.ctrl_points:
+                for cp in self.control_points:
                     cp.attach_mesh(True)
 
                 self.mesh_attached = True
@@ -336,20 +336,20 @@ class AnimationConstructor(Scatter):
     def calc_mesh_verticies(self, step = None, update_mesh = True):
         """Calculate Mesh.vertices and indices from the ControlPoints
         If step omitted, vertices at current position, otherwise
-        vertices at that animation step. For step 0, u, v coordinates and indices are calculated.
+        vertices at that animation step.
         Central vertice at center is added as first item in list
 
         returns vertices, indices
         """
 
-        num = len(self.ctrl_points)
+        num = len(self.control_points)
         triangle_fan_mode = self.mesh_mode == 'triangle_fan'
 
         verts = []
         cent_x, cent_y, cent_u, cent_v = 0.0, 0.0, 0.0, 0.0
 
         # Need to calculate Centroid first, then do pass through to calculate vertices
-        for cp in self.ctrl_points:
+        for cp in self.control_points:
             tx, ty = cp.get_tex_coords(step)
             cent_x += tx
             cent_y += ty
@@ -363,19 +363,19 @@ class AnimationConstructor(Scatter):
 
             cent_vec = Vector(cent_x, cent_y)
             ref = Vector(1, 0) # Reference vector to measure angle from
-            for cp in self.ctrl_points:
+            for cp in self.control_points:
                 cp.centroid_angle = ref.angle(Vector(cp.get_tex_coords(step)) - cent_vec)
 
             # ListProperty.sort does not exist
-            #self.ctrl_points.sort(key = lambda cp: cp.centroid_angle)
-            self.ctrl_points = sorted(self.ctrl_points, key = lambda cp: cp.centroid_angle)
+            #self.control_points.sort(key = lambda cp: cp.centroid_angle)
+            self.control_points = sorted(self.control_points, key = lambda cp: cp.centroid_angle)
 
         # TODO Need to figure out similar solution if using triangle_strip
 
         # Create vertices list
         # centroid added as first vertex in triangle-fan mode
         start = 1 if triangle_fan_mode else 0
-        for index, cp in enumerate(self.ctrl_points, start = start):
+        for index, cp in enumerate(self.control_points, start = start):
             coords = cp.calc_vertex_coords(pos_index=step)
             # Need to calculate u, v centroid still
             cent_u += coords[2]
@@ -410,12 +410,14 @@ class AnimationConstructor(Scatter):
 
     def move_control_points(self, position_index, detach_mesh_after):
         "Move all of the Control Points to the specified position index"
-        for cp in self.ctrl_points:
+        for cp in self.control_points:
             cp.move_to_position_index(position_index, detach_mesh_after=detach_mesh_after)
 
 
     def preview_animation(self, activate_preview):
         "Start/Stop animation preview"
+
+        self.disable_control_points(activate_preview, opacity=0.0)
 
         if activate_preview:
             a = MeshAnimator()
@@ -438,8 +440,9 @@ class AnimationConstructor(Scatter):
         elif self.mesh_animator:
             self.mesh_animator.stop_animation()
 
-            # Set Mesh.vertices back to current step's
-            self.calc_mesh_verticies(step=self.animation_step)
+            # Set Mesh.vertices back to current step's by pretending pos just set
+            for cp in self.control_points:
+                cp.on_pos(cp, cp.pos)
 
 
 
@@ -450,8 +453,15 @@ class AnimationConstructor(Scatter):
     def on_move_resize(self, widget, enabled):
         self.do_translation = enabled
         self.do_scale = enabled
-        for cp in self.ctrl_points:
-            cp.disabled = enabled
+        self.disable_control_points(enabled)
+
+
+    def disable_control_points(self, disable, opacity=0.5):
+        "Disable all control points, fade to given opacity when disabled"
+        a = Animation(duration=0.5, opacity=opacity if disable else 1.0)
+        for cp in self.control_points:
+            cp.disabled = disable
+            a.start(cp)
 
 
     def on_touch_down(self, touch):
@@ -491,7 +501,7 @@ class AnimationConstructor(Scatter):
 
             self.add_widget(ctrl_pt)
             # cp.vertex_index will be set within on_ctrl_points
-            self.ctrl_points.append(ctrl_pt)
+            self.control_points.append(ctrl_pt)
 
             touch.pop()
             return True
