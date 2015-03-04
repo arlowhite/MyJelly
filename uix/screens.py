@@ -21,9 +21,9 @@ class JellySelectionScreen(Screen):
 class JellyAnimationConstructorScreen(Screen):
     "Modify the Mesh animation for the selected Jelly"
 
-    def set_jelly_data(self, jelly_data):
+    def set_animation_data(self, data):
         ac = self.ids.animation_constructor
-        ac.jelly_data = jelly_data
+        ac.animation_data = data
 
 
 # FIXME Maybe always switch_to to clean-up memory

@@ -4,10 +4,10 @@ import random
 
 from kivy.logger import Logger
 from kivy.clock import Clock
+from kivy.graphics import Translate, Rectangle, Line, Color, Mesh, PushState, PopState, Canvas, InstructionGroup
 from kivy.graphics import Translate, Rectangle, Line, Color, Mesh
 from kivy.vector import Vector
 from kivy.core.image import Image as CoreImage
-from kivy.uix.image import Image
 from kivy.uix.scatter import ScatterPlane, Scatter
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.stencilview import StencilView
@@ -185,7 +185,7 @@ class AnimationConstructor(Scatter):
 
     """
 
-    jelly_data = ObjectProperty(None)
+    animation_data = ObjectProperty(None)
     control_points = ListProperty([])
     animation_step = BoundedNumericProperty(0, min=0)
     # Image can be moved and zoomed by user to allow more precise ControlPoint placement.
@@ -195,94 +195,91 @@ class AnimationConstructor(Scatter):
         self.mesh_mode = 'triangle_fan'
         self.mesh_attached = False
         self._image_size_set = False
-        self.control_point_bbox = [0, 0, 1, 1, 1, 1]
         self.mesh = None
         self._previous_step = 0
         self.faded_image_opacity = 0.5
         super(AnimationConstructor, self).__init__(**kwargs)
 
         with self.canvas:
+            self.image_color = Color(rgba=(1, 1, 1, 1))
+            self.image = Rectangle()
+
             self.mesh_color = Color(rgba=(1, 1, 1, 1))
             self.mesh = Mesh(mode=self.mesh_mode)
 
 
-    def on_jelly_data(self, widget, data):
+    def on_animation_data(self, widget, data):
+        """Resets AnimationConstructor, displays image centered"""
+        # TODO Work on reseting state? Just create new instead?
+
+        Logger.debug('animation_data set')
         # self has default size at this point, sizing must be done in on_size
-        # Image will be fit within size once in self.on_size
-        # need mipmap=True again?
-        #texture = data.bell_image.texture
+
         with self.canvas:
             # mipmap=True changes tex_coords and screws up calculations
             # TODO Research mipmap more
             cimage = CoreImage(data.bell_image_filename, mipmap=False)
-            texture = cimage.texture
 
 
+        texture = cimage.texture
+
+        self.image.texture = texture
         self.mesh.texture = texture
         self.texture = texture
         # TODO Position Image center/zoomed by default
         # Nexus 10 Image is smaller, test density independent
         # TODO Is there any benifit to Image vs Rectangle w/ Texture ?
-        img = Image(texture=texture, keep_ratio=True, allow_stretch=True)
-        img.bind(norm_image_size=self.on_norm_image_size)
-        img.size = texture.size
-        self.image = img
-        self.add_widget(img)
 
-        # Rectangle with texture looks the same
-        # with self.canvas:
-        #     Rectangle(texture=texture, pos=(0,0), size=texture.size)
+        # No need for Image if we're not taking advantage of ratio maintaining code
+        #img = Image(texture=texture, keep_ratio=True, allow_stretch=True)
+        #img.bind(norm_image_size=self.on_norm_image_size)
+        #self.add_widget(img)
 
+        # Just set Scatter and Rectangle to texture size
+        self.image.size = texture.size
+        self.size = texture.size
+        # Will be positioned and scalled in on_parent_size
 
-    # TODO Get rid of? just visualizing image
-    def on_norm_image_size(self, widget, size):
-        # Calculating the Image bounding box coordinates to limit ControlPoints to
-        # pos/center is in window coordinates, just use size
-        half_w = self.width / 2.0
-        half_h = self.height / 2.0
-        half_iw = size[0] / 2.0
-        half_ih = size[1] / 2.0
-
-        bbox = self.control_point_bbox
-        # Bottom-Left bound
-        bbox[0] = half_w - half_iw
-        bbox[1] = half_h - half_ih
-        # Upper-right bound
-        bbox[2] = half_w + half_iw
-        bbox[3] = half_h + half_ih
-
-        # Store image width & height for efficency
-        bbox[4] = size[0]
-        bbox[5] = size[1]
-
-        # This simple?
-        bbox[0] = 0
-        bbox[1] = 0
-        bbox[2] = size[0]
-        bbox[3] = size[1]
-
-        # Used for ControlPoint animation limits
-        self.bbox_diagonal = (size[0]**2 + size[1]**2)**0.5
-
-        print('on_norm_image_size', size, 'control_point_bbox', bbox)
+        self.animation_step = 0
 
 
-    # Size does not change when scaling Scatter, only when window changes
-    def on_size(self, widget, size):
-        if size[1] == 0.0:
-            print('ignoring zero height', size)
+    def on_parent(self, _, parent):
+        parent.bind(size=self.on_parent_size)
+
+    def on_parent_size(self, widget, size):
+        print(self.__class__.__name__ + '.on_parent_size', size)
+        p_width, p_height = size
+
+        # Ignore default/zero sizes
+        if p_height == 0.0 or p_height == 1:
+            print('ignoring size', size)
             return
+
+        # self size is always set to Image size, instead just re-center and re-scale
+        # Idea: Maybe avoid this if user has moved-resized?
 
         # Fit Image/Mesh within
         #self.image.size = size
         # TODO Control points should stay aligned with image
-        print(self.__class__.__name__, 'on_size', size)
+        #print(self.__class__.__name__, 'on_size', size)
         # FIXME Updating Image.size messes up ControlPoint references
         # Only do this once
         # if self._image_size_set:
         #     return
         # self.image.size = size
         # self._image_size_set = True
+        img = self.image
+        self.center = self.parent.center
+
+        # scale up to fit, whichever dimension is smaller
+        h_scale = p_height/float(self.height)
+        w_scale = p_width/float(self.width)
+        self.scale = min(h_scale, w_scale)
+
+
+    def on_size(self, _, size):
+        print(self.__class__.__name__ + '.on_size', size)
+        self.bbox_diagonal = (size[0]**2 + size[1]**2)**0.5
 
     def on_control_points(self, widget, points):
         # If on first animation step, Update mesh to preview Mesh cut
@@ -290,8 +287,10 @@ class AnimationConstructor(Scatter):
             self.calc_mesh_verticies(step = 0)
 
             # Fade image a bit
-            if self.image.opacity > self.faded_image_opacity:
-                Animation(opacity=self.faded_image_opacity).start(self.image)
+            #if self.image.opacity > self.faded_image_opacity:
+                #Animation(opacity=self.faded_image_opacity).start(self.image)
+
+            Animation(a=self.faded_image_opacity).start(self.image_color)
 
 
     def on_animation_step(self, widget, step):
@@ -303,16 +302,13 @@ class AnimationConstructor(Scatter):
         print('on_animation_step', step)
 
         if step == 0:
-            Animation(opacity=self.faded_image_opacity).start(self.image)
+            Animation(a=self.faded_image_opacity).start(self.image_color)
             # Mesh will be detached after animation
             self.mesh_attached = False
 
         else:
             # Not first animation step
-            Animation(opacity=0.0).start(self.image)
-
-            if not self.mesh:
-                self.create_mesh()
+            Animation(a=0.0).start(self.image_color)
 
             mesh = self.mesh
 

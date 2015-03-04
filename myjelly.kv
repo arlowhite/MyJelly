@@ -92,9 +92,9 @@
 
                 canvas.after:
                     Color:
-                        rgb: 1, 1, 1
+                        rgba: 1, 1, 1, 0.7
                     Line:
-                        rectangle: self.x, self.y, self.width, self.height
+                        rectangle: self.x - 1, self.y, self.width + 2, self.height
 
                 AnimationConstructor:
                     id: animation_constructor
@@ -102,7 +102,9 @@
                     # Unlock/Lock Scatter
                     move_resize: move_resize_switch.active
 
-                    pos: self.parent.pos
+# Centered in code when data changes
+                    #pos: self.parent.pos
+                    #center: self.parent.center
 
                     animation_step: carousel.index
 
@@ -124,23 +126,36 @@
 
 <AnimationConstructor>:
     # Scatter outline
-#    canvas.after:
+#    canvas:
+#        # Shows scaled bounds
 #        Color:
 #            rgb: 0, 0, 1
 #        Line:
+#            rectangle: 0, 0, self.width, self.height
+#
+#        Color:
+#            rgba: 1,1,1,1
+#
+#    canvas.after:
+#        # Shows natural size (no-scaling)
+#        Color:
+#            rgb: 1, 0, 0
+#        Line:
 #            rectangle: self.x, self.y, self.width, self.height
 
-#                    Color:
-#                        rgb: 0, 1, 0
-#                    Line:
-#                        rectangle: self.bbox[0][0], self.bbox[0][1], self.bbox[1][0], self.bbox[1][0]
+#        Color:
+#            rgb: 0, 1, 0
+#        Line:
+#            rectangle: self.bbox[0][0], self.bbox[0][1], self.bbox[1][0], self.bbox[1][0]
 
     do_rotation: False
     do_translation: False
     do_scale: False
-    #scale: 0.8
+
     scale_min: 0.25
-    scale_max: 5.0
+    scale_max: 6.0
+    # Don't let parent re-size
+    size_hint: None, None
     auto_bring_to_front: False
     do_collide_after_children: False
 

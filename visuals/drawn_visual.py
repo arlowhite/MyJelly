@@ -106,18 +106,18 @@ class ControlPoint(Widget):
             # pos was converted to_local
             # Restrict to parent
             # 0 if < 0, parent.right if > parent.right, otherwise x
+            parent = self.parent
 
             # TODO Fix Hardcoded logic to animation step 0
             if self.position_index == 0:
-                bbox = self.parent.control_point_bbox
                 # Parents boundary in local coords
-                self.center_x = min(max(bbox[0], x), bbox[2])
-                self.center_y = min(max(bbox[1], y), bbox[3])
+                self.center_x = min(max(0, x), parent.width)
+                self.center_y = min(max(0, y), parent.height)
 
             else:
                 origin = self.positions[0]
                 # Only allow moving if within this distance of first point
-                distance_limit = self.parent.bbox_diagonal / 2.5
+                distance_limit = parent.bbox_diagonal
                 pos0v = Vector(origin)
                 if pos0v.distance((x, y)) < distance_limit:
                     self.center = (x, y)
@@ -226,15 +226,14 @@ class ControlPoint(Widget):
 
         x, y = self.get_tex_coords(pos_index)
 
-        bbox = self.parent.control_point_bbox
         # # Parents boundary in local coords
         # self.center_x = min(max(bbox[0], x), bbox[2])
         # self.center_y = min(max(bbox[1], y), bbox[3])
         #w, h = self.parent.image.norm_image_size
-        w = bbox[4]
-        h = bbox[5]
+        #w = bbox[4]
+        #h = bbox[5]
 
         #tx = x - bbox[0]
         #ty = y - bbox[1]
         # FIXME Detect need to texture flip
-        return (x, y, x/w, 1.0 - y/h)
+        return (x, y, x/self.parent.width, 1.0 - y/self.parent.height)

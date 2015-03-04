@@ -3,8 +3,8 @@ __author__ = 'awhite'
 import kivy
 kivy.require('1.8.0')
 
-from kivy.config import Config
-Config.set('graphics', 'fullscreen', '0')
+#from kivy.config import Config
+#Config.set('graphics', 'fullscreen', '0')
 
 from kivy.app import App
 from kivy.uix.widget import Widget
@@ -117,7 +117,7 @@ class MyJellyApp(App):
         # switch_to destroys old screen
         #sm.switch_to(s, direction='left')
         ac = sm.current_screen
-        ac.set_jelly_data(JellyData())
+        ac.set_animation_data(JellyData())
 
 
 
