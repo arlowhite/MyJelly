@@ -79,18 +79,7 @@ class ControlPoint(Widget):
 
         print(self.pos)
 
-    def on_touch_down(self, touch):
-        if self.disabled:
-            return False
-
-        if super(ControlPoint, self).on_touch_down(touch):
-            return True
-
-        # convert to center?
-        if self.collide_point(*touch.pos):
-            touch.grab(self)
-
-            return True
+    # parent intercepts on_touch_down to find closest ControlPoint
 
     def on_touch_move(self, touch):
         # Need to return False for Scatter to work when touching this point
@@ -112,8 +101,8 @@ class ControlPoint(Widget):
             # TODO Fix Hardcoded logic to animation step 0
             if self.position_index == 0:
                 # Parents boundary in local coords
-                self.center_x = min(max(0, x), parent.width)
-                self.center_y = min(max(0, y), parent.height)
+                self.x = min(max(0, x), parent.width)
+                self.y = min(max(0, y), parent.height)
 
             else:
                 origin = self.positions[0]
@@ -121,11 +110,11 @@ class ControlPoint(Widget):
                 distance_limit = parent.bbox_diagonal
                 pos0v = Vector(origin)
                 if pos0v.distance((x, y)) < distance_limit:
-                    self.center = (x, y)
+                    self.pos = (x, y)
                 else:
                     # Place as far as allowed
                     v = (Vector((x,y)) - Vector(origin)).normalize()
-                    self.center = pos0v + v*distance_limit
+                    self.pos = pos0v + v*distance_limit
 
             return True
 
@@ -153,8 +142,8 @@ class ControlPoint(Widget):
             return True
 
     def on_pos(self, widget, new_pos):
-        # Copy values instead of reference to center
-        self.positions[self.position_index] = (self.center_x, self.center_y)
+        # Copy values instead of reference to pos
+        self.positions[self.position_index] = (self.x, self.y)
         # print('ControlPoint.on_pos', new_pos)
         # if self.parent:
         #     print('ControlPoint vertice coords', self.calc_vertice_coords())
@@ -193,16 +182,16 @@ class ControlPoint(Widget):
                     self._animation.cancel(self)
 
                 self._detach_after_animation = detach_mesh_after
-                a = Animation(center=self.positions[index], duration=0.7)
+                a = Animation(pos=self.positions[index], duration=0.7)
                 a.bind(on_complete=self._on_animate_complete, on_start=self._on_animate_start)
                 a.start(self)
                 self._animation = a
 
             else:
-                self.center = self.positions[index]
+                self.pos = self.positions[index]
         else:
             # Position index not set before, save current position at index
-            self.positions[index] = (self.center_x, self.center_y)
+            self.positions[index] = (self.x, self.y)
 
     def _on_animate_start(self, anim, widget):
         self.disabled = True
@@ -227,7 +216,7 @@ class ControlPoint(Widget):
     def get_tex_coords(self, pos_index=None):
         if pos_index is None:
             # Current location
-            return self.center_x, self.center_y
+            return self.x, self.y
         else:
             return self.positions[pos_index]
 
@@ -236,14 +225,7 @@ class ControlPoint(Widget):
 
         x, y = self.get_tex_coords(pos_index)
 
-        # # Parents boundary in local coords
-        # self.center_x = min(max(bbox[0], x), bbox[2])
-        # self.center_y = min(max(bbox[1], y), bbox[3])
-        #w, h = self.parent.image.norm_image_size
-        #w = bbox[4]
-        #h = bbox[5]
+        # Parents box defines tex_coords
 
-        #tx = x - bbox[0]
-        #ty = y - bbox[1]
         # FIXME Detect need to texture flip
         return (x, y, x/self.parent.width, 1.0 - y/self.parent.height)

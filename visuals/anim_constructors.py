@@ -489,33 +489,72 @@ class AnimationConstructor(Scatter):
         if not self.collide_point(x, y):
             return False
 
+        if self.move_resize:
+            # Defer to Scatter
+            return super(AnimationConstructor, self).on_touch_down(touch)
 
-        handled = super(AnimationConstructor, self).on_touch_down(touch)
 
-        if not handled:
-            if self.animation_step != 0:
-                return handled
+        # Otherwise, find nearest ControlPoint
+        # We must take over children's on_touch_down since having them check who's closest instead of the parent
+        assert len(self.children) == len(self.control_points)
 
-            touch.push()
+        touch.push()
+        try:
             touch.apply_transform_2d(self.to_local)
+            transformed_x, transformed_y = touch.x, touch.y
 
-            # Create a new ControlPoint
+            if self.children:
+                touch_vec = Vector(transformed_x, transformed_y)
+
+                closest = None
+                closest_dist = 0
+                for child in self.children:
+                    if child.disabled:
+                        continue
+
+                    # Distance from touch to child
+                    dist = touch_vec.distance(child.pos)
+                    if closest is None or dist < closest_dist:
+                        closest = child
+                        closest_dist = dist
+
+                if closest is None:
+                    # All children disabled
+                    return False
+
+                # Grab closest if within certain distance
+                elif closest_dist < closest.width:
+                    closest.pos = transformed_x, transformed_y
+                    touch.grab(closest)
+                    return True
+
+            # No children or none close enough
+
+            if self.animation_step != 0:
+                # Only create ControlPoints in first step
+                return False
+
+            # None were close enough, create a new ControlPoint
             ctrl_pt = ControlPoint()
             ctrl_pt.mesh = self.mesh
-
 
             self.add_widget(ctrl_pt)
 
             # Use transformed coordinates
-            ctrl_pt.center = (touch.x, touch.y)
+            ctrl_pt.pos = (transformed_x, transformed_y)
 
             # cp.vertex_index will be set within on_ctrl_points
             self.control_points.append(ctrl_pt)
+            # Grab right away so user can create and move in one touch
+            touch.grab(ctrl_pt)
 
-            touch.pop()
             return True
 
-        return handled
+        finally:
+            # Always pop when returning from try block where we did touch.push()
+            touch.pop()
+
+
 
         # Using Scatter now, need to think about, not needed I think
     # def on_touch_move(self, touch):

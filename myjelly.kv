@@ -181,12 +181,14 @@
 
 
 <ControlPoint>:
+    # For simplicity, pos is the center of the image, collide_point is not used
+    # This way pos does not need to change when scaling
     natural_size: cm(1.6)
     size: cm(1.6), cm(1.6)
 
     canvas:
         Rectangle:
             source: "media/images/crosshair.png"
-            pos: self.pos
+            pos: self.x - self.width/2.0, self.y - self.height/2.0
             size: self.size
 
