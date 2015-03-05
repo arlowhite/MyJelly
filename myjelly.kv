@@ -183,12 +183,19 @@
 <ControlPoint>:
     # For simplicity, pos is the center of the image, collide_point is not used
     # This way pos does not need to change when scaling
-    natural_size: cm(1.6)
-    size: cm(1.6), cm(1.6)
+    natural_size: cm(1.0)
+    size: cm(1.0), cm(1.0)
 
-    canvas:
-        Rectangle:
-            source: "media/images/crosshair.png"
-            pos: self.x - self.width/2.0, self.y - self.height/2.0
-            size: self.size
+    Image:
+    # TODO Ring a bit thin
+        source: "media/images/crosshair.png"
+        pos: root.x - root.width/2.0, root.y - root.height/2.0
+        size: root.size
+        mipmap: True  # Looks much better with mipmap
+
+#    canvas:
+#        Rectangle:
+#            source: "media/images/crosshair.png"
+#            pos: self.x - self.width/2.0, self.y - self.height/2.0
+#            size: self.size
 
