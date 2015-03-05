@@ -190,6 +190,7 @@ class AnimationConstructor(Scatter):
     animation_step = BoundedNumericProperty(0, min=0)
     # Image can be moved and zoomed by user to allow more precise ControlPoint placement.
     move_resize = BooleanProperty(False)
+    animating = BooleanProperty(False)
 
     def __init__(self, **kwargs):
         self.mesh_mode = 'triangle_fan'
@@ -301,6 +302,11 @@ class AnimationConstructor(Scatter):
         """
         print('on_animation_step', step)
 
+        resume_animation = self.animating
+        if self.animating:
+            # Switched step while previewing animation
+            self.preview_animation(False)
+
         if step == 0:
             Animation(a=self.faded_image_opacity).start(self.image_color)
             # Mesh will be detached after animation
@@ -328,6 +334,9 @@ class AnimationConstructor(Scatter):
         self.move_control_points(step, detach_mesh_after=step==0)
 
         self._previous_step = step
+
+        if resume_animation:
+            self.preview_animation()
 
     def calc_mesh_verticies(self, step = None, update_mesh = True):
         """Calculate Mesh.vertices and indices from the ControlPoints
@@ -410,7 +419,7 @@ class AnimationConstructor(Scatter):
             cp.move_to_position_index(position_index, detach_mesh_after=detach_mesh_after)
 
 
-    def preview_animation(self, activate_preview):
+    def preview_animation(self, activate_preview=True):
         "Start/Stop animation preview"
 
         self.disable_control_points(activate_preview, opacity=0.0)
@@ -431,6 +440,7 @@ class AnimationConstructor(Scatter):
                 a.add_vertices(verts, duration=0.5, horizontal_transition='in_back', vertical_transition='out_cubic')
 
             self.mesh_animator = a
+            self.animating = True
             a.start_animation()
 
         elif self.mesh_animator:
@@ -439,6 +449,8 @@ class AnimationConstructor(Scatter):
             # Set Mesh.vertices back to current step's by pretending pos just set
             for cp in self.control_points:
                 cp.on_pos(cp, cp.pos)
+
+            self.animating = False
 
 
 
@@ -489,13 +501,14 @@ class AnimationConstructor(Scatter):
 
             # Create a new ControlPoint
             ctrl_pt = ControlPoint()
-
-            # Use transformed coordinates
-            ctrl_pt.center = (touch.x, touch.y)
             ctrl_pt.mesh = self.mesh
 
 
             self.add_widget(ctrl_pt)
+
+            # Use transformed coordinates
+            ctrl_pt.center = (touch.x, touch.y)
+
             # cp.vertex_index will be set within on_ctrl_points
             self.control_points.append(ctrl_pt)
 

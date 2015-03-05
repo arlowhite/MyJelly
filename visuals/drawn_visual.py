@@ -60,6 +60,7 @@ class Path:
 class ControlPoint(Widget):
     "A visual point used in Mesh animation setup"
 
+    natural_size = NumericProperty(1.0)  # size will be scaled, so this is the default/natural size
     drawn_size = NumericProperty(1.0)
     hole_diam = NumericProperty(1.0)
 
@@ -169,6 +170,15 @@ class ControlPoint(Widget):
 
             # Trigger update
             self.mesh.vertices = verts
+
+    def on_parent(self, _, parent):
+        if hasattr(parent, 'scale'):
+            parent.bind(scale=self.on_parent_scale)
+            self.on_parent_scale(parent, parent.scale)
+
+    def on_parent_scale(self, _, scale):
+        self.size = self.natural_size / scale, self.natural_size / scale
+
 
     def move_to_position_index(self, index, animate=True, detach_mesh_after = False):
         if index < 0:
