@@ -287,7 +287,7 @@ class AnimationConstructor(Scatter):
     def on_control_points(self, widget, points):
         # If on first animation step, Update mesh to preview Mesh cut
         if self.animation_step == 0 and len(points) >= 3:
-            self.calc_mesh_verticies(step = 0)
+            self.calc_mesh_vertices(step = 0)
 
             # Fade image a bit
             #if self.image.opacity > self.faded_image_opacity:
@@ -323,7 +323,7 @@ class AnimationConstructor(Scatter):
             if self._previous_step == 0:
                 # Redo base vertices when moving from 0 to other
                 Logger.debug('Recalculating vertices/indices during transition from step 0')
-                self.calc_mesh_verticies(step = 0)
+                self.calc_mesh_vertices(step = 0)
 
             if not self.mesh_attached:
                 # attach before moving to other animation steps
@@ -340,7 +340,7 @@ class AnimationConstructor(Scatter):
         if resume_animation:
             self.preview_animation()
 
-    def calc_mesh_verticies(self, step = None, update_mesh = True):
+    def calc_mesh_vertices(self, step = None, update_mesh = True):
         """Calculate Mesh.vertices and indices from the ControlPoints
         If step omitted, vertices at current position, otherwise
         vertices at that animation step.
@@ -350,6 +350,11 @@ class AnimationConstructor(Scatter):
         """
 
         num = len(self.control_points)
+        if num == 0:
+            Logger.warning("AnimationConstructor: Called calc_mesh_vertices without any control_points")
+            return [], []
+
+
         triangle_fan_mode = self.mesh_mode == 'triangle_fan'
 
         verts = []
@@ -436,7 +441,7 @@ class AnimationConstructor(Scatter):
 
             # Iterate steps from 0 to the current one
             for step in range(self.animation_step+1):
-                verts, _ = self.calc_mesh_verticies(step=step, update_mesh=False)
+                verts, _ = self.calc_mesh_vertices(step=step, update_mesh=False)
                 a.add_vertices(verts, duration=0.5, horizontal_transition='in_back', vertical_transition='out_cubic')
 
             self.mesh_animator = a

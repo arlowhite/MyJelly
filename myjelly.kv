@@ -109,6 +109,8 @@
 
                     animation_step: carousel.index
 
+                    # On step 0 un toggle
+                    on_animation_step: if args[1] == 0: animate_toggle.state = 'normal'
 
             BoxLayout:
                 size_hint_y: None
@@ -121,8 +123,10 @@
                     size_hint_x: None
 
                 ToggleButton:
+                    id: animate_toggle
                     text: "Animate"
                     on_state: animation_constructor.preview_animation(self.state=='down')
+                    disabled: animation_constructor.animation_step == 0
 
 
 
