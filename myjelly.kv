@@ -186,6 +186,13 @@
     natural_size: cm(1.0)
     size: cm(1.0), cm(1.0)
 
+    canvas.before:
+        # For some reason doing Color programatically isn't working...
+        Color:
+            rgba: 42/255.0, 113/255.0, 182/255.0, 0.8
+        Line:
+            width: 1.0  # dp(1) way too fat on Nexus 10, not sure why.
+
     Image:
     # TODO Ring a bit thin
         source: "media/images/crosshair.png"

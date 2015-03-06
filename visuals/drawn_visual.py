@@ -5,6 +5,7 @@ from kivy.graphics import Line, Canvas, Color
 from kivy.properties import NumericProperty
 from kivy.animation import Animation
 from kivy.vector import Vector
+from kivy.metrics import dp
 
 
 class Path:
@@ -77,9 +78,22 @@ class ControlPoint(Widget):
 
         super(ControlPoint, self).__init__(**kwargs)
 
-        print(self.pos)
+        # Line always white!?
+        # Tried on_canvas, didn't make a difference.
+        # with self.canvas:
+        # self.trail_line_color = Color(rgba=(0.1, 1.0, 1.0, 1.0))
+        # self.trail_line = Line(width=dp(1.0))
 
-    # parent intercepts on_touch_down to find closest ControlPoint
+        # For some reason, color is only working when set in KV.
+        for instruction in self.canvas.before.children:
+            if isinstance(instruction, Line):
+                self.trail_line = instruction
+
+    def on_touch_down(self, touch):
+        # Return False instead of True so Scatter works with dragging ControlPoint
+        # For other touch_down events, parent handles logic
+        if self.disabled:
+            return False
 
     def on_touch_move(self, touch):
         # Need to return False for Scatter to work when touching this point
@@ -144,6 +158,7 @@ class ControlPoint(Widget):
     def on_pos(self, widget, new_pos):
         # Copy values instead of reference to pos
         self.positions[self.position_index] = (self.x, self.y)
+        self.update_trail_line()
         # print('ControlPoint.on_pos', new_pos)
         # if self.parent:
         #     print('ControlPoint vertice coords', self.calc_vertice_coords())
@@ -152,13 +167,17 @@ class ControlPoint(Widget):
             i = self.vertex_index*4
             verts = self.mesh.vertices
             x, y, u, v = self.calc_vertex_coords()
-            verts[i], verts[i+1] = x, y
-            if not self.mesh_attached:
-                # Also update u, v
-                verts[i+2], verts[i+3] = u, v
+            try:
+                verts[i], verts[i+1] = x, y
+                if not self.mesh_attached:
+                    # Also update u, v
+                    verts[i+2], verts[i+3] = u, v
 
-            # Trigger update
-            self.mesh.vertices = verts
+                # Trigger update
+                self.mesh.vertices = verts
+
+            except IndexError:
+                pass
 
     def on_parent(self, _, parent):
         if hasattr(parent, 'scale'):
@@ -192,6 +211,26 @@ class ControlPoint(Widget):
         else:
             # Position index not set before, save current position at index
             self.positions[index] = (self.x, self.y)
+
+            self.update_trail_line()
+
+
+    def update_trail_line(self):
+        "Update line that shows how point moves through animation"
+
+        if not hasattr(self, 'trail_line'):
+            return
+
+        indices = self.positions.keys()
+        if len(indices) <= 1:
+            return
+
+        indices.sort()
+        points = []
+        for index in indices:
+            points.extend(self.positions[index])
+
+        self.trail_line.points = points
 
     def _on_animate_start(self, anim, widget):
         self.disabled = True

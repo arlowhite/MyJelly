@@ -4,14 +4,12 @@ import random
 
 from kivy.logger import Logger
 from kivy.clock import Clock
-from kivy.graphics import Translate, Rectangle, Line, Color, Mesh, PushState, PopState, Canvas, InstructionGroup
 from kivy.graphics import Translate, Rectangle, Line, Color, Mesh
 from kivy.vector import Vector
 from kivy.core.image import Image as CoreImage
 from kivy.uix.scatter import ScatterPlane, Scatter
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.stencilview import StencilView
-from kivy.uix.carousel import Carousel
 from kivy.animation import Animation
 from kivy.event import EventDispatcher
 from kivy.properties import ObjectProperty, ListProperty, BoundedNumericProperty, BooleanProperty, NumericProperty
@@ -191,6 +189,8 @@ class AnimationConstructor(Scatter):
     # Image can be moved and zoomed by user to allow more precise ControlPoint placement.
     move_resize = BooleanProperty(False)
     animating = BooleanProperty(False)
+    control_points_disabled = BooleanProperty(False)
+    control_points_opacity = BoundedNumericProperty(1.0, min=0.0, max=1.0)
 
     def __init__(self, **kwargs):
         self.mesh_mode = 'triangle_fan'
@@ -200,6 +200,8 @@ class AnimationConstructor(Scatter):
         self._previous_step = 0
         self.faded_image_opacity = 0.5
         super(AnimationConstructor, self).__init__(**kwargs)
+
+        self.bind(move_resize=self.decide_disable_control_points, animating=self.decide_disable_control_points)
 
         with self.canvas:
             self.image_color = Color(rgba=(1, 1, 1, 1))
@@ -422,8 +424,6 @@ class AnimationConstructor(Scatter):
     def preview_animation(self, activate_preview=True):
         "Start/Stop animation preview"
 
-        self.disable_control_points(activate_preview, opacity=0.0)
-
         if activate_preview:
             a = MeshAnimator()
             a.mesh = self.mesh
@@ -453,7 +453,6 @@ class AnimationConstructor(Scatter):
             self.animating = False
 
 
-
     def collide_point(self, x, y):
         # Make it behave like ScatterPlane, but restricted to parent
         return self.parent.collide_point(x, y)
@@ -461,16 +460,21 @@ class AnimationConstructor(Scatter):
     def on_move_resize(self, widget, enabled):
         self.do_translation = enabled
         self.do_scale = enabled
-        self.disable_control_points(enabled)
 
+    def decide_disable_control_points(self, _, __):
+        # Called when move_resize or animating changes
+        self.control_points_disabled = self.move_resize or self.animating
+        self.control_points_opacity = 0.0 if self.animating else 0.5 if self.move_resize else 1.0
 
-    def disable_control_points(self, disable, opacity=0.5):
-        "Disable all control points, fade to given opacity when disabled"
-        a = Animation(duration=0.5, opacity=opacity if disable else 1.0)
+    def on_control_points_disabled(self, _, disable):
+        Logger.debug("AnimationConstructor: disable_control_points. disable=%s", disable)
         for cp in self.control_points:
             cp.disabled = disable
-            a.start(cp)
 
+    def on_control_points_opacity(self, _, opacity):
+        a = Animation(duration=0.5, opacity=opacity)
+        for cp in self.control_points:
+            a.start(cp)
 
     def on_touch_down(self, touch):
 
@@ -523,7 +527,7 @@ class AnimationConstructor(Scatter):
                     return False
 
                 # Grab closest if within certain distance
-                elif closest_dist < closest.width:
+                elif closest_dist < closest.width/1.5:
                     closest.pos = transformed_x, transformed_y
                     touch.grab(closest)
                     return True
