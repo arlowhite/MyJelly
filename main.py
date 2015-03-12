@@ -7,6 +7,7 @@ kivy.require('1.8.0')
 #Config.set('graphics', 'fullscreen', '0')
 
 from kivy.app import App
+from kivy.logger import Logger
 from kivy.uix.widget import Widget
 from kivy.clock import Clock
 
@@ -75,14 +76,34 @@ class MyJellyApp(App):
         self.screen_manager = sm  # Could use root, but this is more clear
 
         # # TODO show env if has Jelly
-        # selection = JellySelectionScreen(name="JellySelection")
-        # # FIXME Hardcoded, load from local storage
-        # selection.display_jellies([JellyData()])
-        # sm.add_widget(selection)
+        self.open_jelly_selection()
 
-        self.open_animation_constructor()
+        #self.open_animation_constructor()
+        Logger.debug('user_data_directory: %s', self.user_data_dir)
 
         return sm
+
+    def on_pause(self):
+        # try:
+        Logger.debug('PAUSE, return True')
+        # self.screen_manager.current_screen.on_pauseeaou()
+
+        # Return True to indicate support pause
+        # OpenGL is kept
+        return True
+
+        # except:
+        # return False
+
+    def on_stop(self):
+        # Called in Linux when closing window
+        # TODO Save state
+        pass
+
+    def on_resume(self):
+        Logger.debug('RESUME')
+
+
 
     # def on_start(self):
     #     # FIXME Is this called on resume? Best place for this code
@@ -109,15 +130,33 @@ class MyJellyApp(App):
 
     def open_animation_constructor(self, jelly=None):
         sm = self.screen_manager
-        if not sm.has_screen('JellyAnimationConstructor'):
-            s = JellyAnimationConstructorScreen(name = 'JellyAnimationConstructor')
-            sm.add_widget(s)
+        # if not sm.has_screen('JellyAnimationConstructor'):
+        # s = JellyAnimationConstructorScreen(name='JellyAnimationConstructor')
+            # sm.add_widget(s)
 
-        sm.current = 'JellyAnimationConstructor'
+        # sm.current = 'JellyAnimationConstructor'
         # switch_to destroys old screen
-        #sm.switch_to(s, direction='left')
-        ac = sm.current_screen
-        ac.set_animation_data(JellyData())
+        s = JellyAnimationConstructorScreen(name='JellyAnimationConstructor')
+        s.set_animation_data(jelly)
+        sm.switch_to(s, direction='left')
+        #ac = sm.current_screen
+
+
+    def open_jelly_selection(self):
+        selection = JellySelectionScreen(name="JellySelection")
+        # # FIXME Hardcoded, load from local storage
+        holland = JellyData()
+        holland.bell_image_filename = 'media/images/holland_jelly.png'
+        data = [JellyData(), holland, JellyData()]
+        selection.display_jellies(data)
+
+        self.screen_manager.switch_to(selection, direction='right')
+        #self.screen_manager.add_widget(selection)
+
+    def open_jelly_environment(self):
+        # Hackish, check if AnimationConstructor screen, grab Jelly Data?
+
+        pass
 
 
 

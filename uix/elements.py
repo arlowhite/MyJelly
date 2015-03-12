@@ -11,9 +11,9 @@ class JellySelectButton(Button):
     # Note: Button binding done in KV
 
     def __init__(self, jelly_data, **kwargs):
-
-        super(JellySelectButton, self).__init__(**kwargs)
         self.jelly_data = jelly_data
+        super(JellySelectButton, self).__init__(**kwargs)
+
 
         #with self.canvas:
 

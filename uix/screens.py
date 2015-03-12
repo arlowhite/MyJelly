@@ -25,6 +25,12 @@ class JellyAnimationConstructorScreen(Screen):
         ac = self.ids.animation_constructor
         ac.animation_data = data
 
+    def restore_state(self):
+        # Called if App resumed and this screen was open
+        # Get last opened AnimationData
+
+        pass
+
 
 # FIXME Maybe always switch_to to clean-up memory
 class JellyScreenManager(ScreenManager):

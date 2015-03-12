@@ -1,6 +1,7 @@
 __author__ = 'awhite'
 
 import random
+from collections import namedtuple
 
 from kivy.logger import Logger
 from kivy.clock import Clock
@@ -22,11 +23,7 @@ from misc.util import evaluate_thing
 # TODO Padding so can pickup ControlPoint on edge
 
 
-class JellyAnimation:
-    "Animates Mesh vertices"
-
-    # log to upper-right
-    # x**# down
+VerticesState = namedtuple('VerticesState', 'vertices, duration, delay, horizontal_transition, vertical_transition')
 
 # TODO Need to serialize this into JellyData somehow
 class MeshAnimator(EventDispatcher):
@@ -51,19 +48,20 @@ class MeshAnimator(EventDispatcher):
 
 
     def add_vertices(self, vertices, duration=1.0, delay=None,
-                     horizontal_transition='linear', vertical_transition='linear'):
+                     horizontal_transition='linear', vertical_transition='linear', uv_change=False):
         """Add a set of vertices.
         duration: Seconds taken to reach vertices at this step.
         delay: Seconds to delay before beginning next animation after this step.
         horizontal|vertical_transition: transition to use when transferring to vertices at this step.
 
         duration & delay can be number, function, or generator
+        TODO Implement uv_change if needed, currently u, v coordinates are never updated from the first step.
         """
         num = len(self.vertices_states)
-        if num > 0 and len(self.vertices_states[0][0]) != len(vertices):
+        if num > 0 and len(self.vertices_states[0].vertices) != len(vertices):
             raise ValueError('Mismatched number of vertices: %d vs %d'%(num, len(vertices)))
 
-        self.vertices_states.append( (vertices, duration, delay, horizontal_transition, vertical_transition) )
+        self.vertices_states.append(VerticesState(vertices, duration, delay, horizontal_transition, vertical_transition) )
 
 
     # TODO Maybe remove if not used much
@@ -95,17 +93,19 @@ class MeshAnimator(EventDispatcher):
             prev = num_states - 1
 
         self.previous_step = prev
+        self._previous_step_vertices = self.vertices_states[prev].vertices
         self.step = step
+        self._next_step_vertices = self.vertices_states[step].vertices
 
         if not self._setup:
             # Set initial vertices
             # Currently, u,v come from step 0 and should never be updated again
-            self.mesh.vertices = list(self.vertices_states[0][0])
+            self.mesh.vertices = list(self.vertices_states[0].vertices)
 
             self._setup = True
 
-        step = self.vertices_states[self.step]
-        dur = evaluate_thing(step[1])
+        state = self.vertices_states[self.step]
+        dur = evaluate_thing(state.duration)
 
         # Setting properties will set vertices to previous_step
         self.horizontal_fraction = 0.0
@@ -113,8 +113,8 @@ class MeshAnimator(EventDispatcher):
 
         # Go from 0 to 1 each time, try saving Animation
         # PERF try keeping Animation instance, need to change transition/duration each time
-        a = Animation(horizontal_fraction=1.0, transition=step[3], duration=dur)
-        a &= Animation(vertical_fraction=1.0, transition=step[4], duration=dur)
+        a = Animation(horizontal_fraction=1.0, transition=state.horizontal_transition, duration=dur)
+        a &= Animation(vertical_fraction=1.0, transition=state.vertical_transition, duration=dur)
         a.bind(on_complete=self.on_animation_complete)
         self._animation = a
         a.start(self)
@@ -130,7 +130,7 @@ class MeshAnimator(EventDispatcher):
 
     def on_animation_complete(self, anim, widget):
         # Delay after current step
-        delay_thing = self.vertices_states[self.step][2]
+        delay_thing = self.vertices_states[self.step].delay
         if delay_thing:
             Clock.schedule_once(self.start_animation, evaluate_thing(delay_thing))
 
@@ -141,21 +141,22 @@ class MeshAnimator(EventDispatcher):
     # def on_horizontal_fraction(self, *args):
     #     print('on_horizontal_fraction', args)
 
+    # Note: This method is performance sensitive!
     def on_vertical_fraction(self, widget, vert):
-        # print('on_vertical_fraction', vert)
 
         # Do all work in one event function for efficency (horizontal should have been updated before this because of creation order.
         # TODO: Measure performance. Numpy math? Kivy Matrix math?
 
         horiz = self.horizontal_fraction
 
-        in_verts = self.vertices_states[self.previous_step][0]
-        out_verts = self.vertices_states[self.step][0]
+        in_verts = self._previous_step_vertices
+        out_verts = self._next_step_vertices
 
         mesh = self.mesh
         verts = mesh.vertices
         # Skip central point, Go through by 4's
         # Vertex lists conform to Mesh.vertices
+        # Perf: NumyPy able to calculate faster?
         for x in range(0, len(in_verts), 4):
             x_coord = (out_verts[x]-in_verts[x]) * horiz + in_verts[x]
             y = x+1
@@ -250,12 +251,12 @@ class AnimationConstructor(Scatter):
         parent.bind(size=self.on_parent_size)
 
     def on_parent_size(self, widget, size):
-        print(self.__class__.__name__ + '.on_parent_size', size)
+        Logger.debug(self.__class__.__name__ + '.on_parent_size %s', size)
         p_width, p_height = size
 
         # Ignore default/zero sizes
         if p_height == 0.0 or p_height == 1:
-            print('ignoring size', size)
+            Logger.debug('ignoring size %s', size)
             return
 
         # self size is always set to Image size, instead just re-center and re-scale
@@ -281,7 +282,7 @@ class AnimationConstructor(Scatter):
 
 
     def on_size(self, _, size):
-        print(self.__class__.__name__ + '.on_size', size)
+        Logger.debug(self.__class__.__name__ + '.on_size %s', size)
         self.bbox_diagonal = (size[0]**2 + size[1]**2)**0.5
 
     def on_control_points(self, widget, points):
@@ -302,7 +303,7 @@ class AnimationConstructor(Scatter):
         1: Outer Bell
         2: Closed Bell (Optional)
         """
-        print('on_animation_step', step)
+        Logger.debug('on_animation_step %d', step)
 
         resume_animation = self.animating
         if self.animating:

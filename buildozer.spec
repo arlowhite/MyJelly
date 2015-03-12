@@ -4,6 +4,7 @@
 title = My Jelly
 
 # (str) Package name
+# Never rename! Otherwise user_data_dir changes.
 package.name = myjelly
 
 # (str) Package domain (needed for android/ios packaging)

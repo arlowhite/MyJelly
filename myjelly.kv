@@ -16,10 +16,20 @@
         text: "Done"
         on_press: self.parent.on_done_pressed()
 
-
+# RelativeLayout
 <JellySelectionScreen>:
+
     ActionBar:
-        text: 'foo'
+        id: action_bar
+        top: root.top
+        size_hint_y: None
+
+        ActionView:
+            ActionPrevious:
+                title: 'Jellies'
+
+            ActionButton:
+                text: '+ New Jelly'
 
         #ActionPrevious:
         #ActionButton
@@ -28,10 +38,44 @@
     # TODO List selection stuff instead?
 
     ScrollView:
+        pos: 0, 0
+        #top: action_bar.y
+        height: action_bar.y
+
+        size_hint_y: None
+#        canvas:
+#            Rectangle:
+#                pos: self.pos
+#                size: self.size
+
+# GridLayout does not expand its size, so need to calculate its height.
         GridLayout:
             id: jelly_grid
+            size_hint_y: None
+            height: 3*cm(8)
         # TODO Increase based on screen size
             cols: 1
+            #row_default_height: cm(5)
+            #row_force_default: True
+            spacing: 5, 5
+
+
+
+
+
+<JellySelectButton>:
+
+    on_release: app.open_animation_constructor(self.jelly_data)
+
+    #size_hint_y: None
+    #height: self.width
+    # TODO padding?
+
+    Image:
+        source: root.jelly_data.bell_image_filename
+        pos: root.pos
+        size: root.size
+        allow_stretch: True
 
 
 <JellyAnimationConstructorScreen>:
@@ -46,7 +90,8 @@
 
                 ActionPrevious:
                     title: 'Jelly Animator'
-                    on_press: root.manager.current = 'JellySelection'
+                    # FIXME Manage previous button
+                    on_press: app.open_jelly_selection()
 
                 ActionButton:
                     icon: 'atlas://data/images/defaulttheme/previous_normal'
@@ -173,14 +218,6 @@
     halign: 'center'
     # FIXME No effect
     valign: 'middle'
-
-
-<JellySelectButton>:
-
-    on_release: app.open_animation_constructor(self.jelly_data)
-
-    Label:
-        text: 'Jelly IMAGE'
 
 
 
