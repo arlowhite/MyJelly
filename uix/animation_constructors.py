@@ -1,181 +1,16 @@
+from kivy import Logger
+from kivy.animation import Animation
+from kivy.core.image import Image as CoreImage
+from kivy.graphics.context_instructions import Color
+from kivy.graphics.vertex_instructions import Rectangle, Mesh
+from kivy.properties import ListProperty, BoundedNumericProperty, BooleanProperty, StringProperty
+from kivy.uix.scatter import Scatter
+from kivy.vector import Vector
+from visuals.animations import MeshAnimator, setup_step
+from visuals.drawn_visual import ControlPoint
+
 __author__ = 'awhite'
 
-import random
-from collections import namedtuple
-
-from kivy.logger import Logger
-from kivy.clock import Clock
-from kivy.graphics import Translate, Rectangle, Line, Color, Mesh
-from kivy.vector import Vector
-from kivy.core.image import Image as CoreImage
-from kivy.uix.scatter import ScatterPlane, Scatter
-from kivy.uix.floatlayout import FloatLayout
-from kivy.uix.stencilview import StencilView
-from kivy.animation import Animation
-from kivy.event import EventDispatcher
-from kivy.properties import ObjectProperty, ListProperty, BoundedNumericProperty, BooleanProperty, NumericProperty
-
-from .drawn_visual import ControlPoint
-from misc.util import evaluate_thing
-
-# RelativeLayout or Scatter seems overcomplicated and causes issues
-# just do it myself, don't really need to add_widget()
-# TODO Padding so can pickup ControlPoint on edge
-
-
-VerticesState = namedtuple('VerticesState', 'vertices, duration, delay, horizontal_transition, vertical_transition')
-
-# TODO Need to serialize this into JellyData somehow
-class MeshAnimator(EventDispatcher):
-    """Animates a Mesh's vertices from one set to another in a loop.
-    Programmer should set MeshAnimator.mesh and make sure indices on Mesh are set.
-    """
-
-    # variables that are animated and used to adjust vertices
-    horizontal_fraction = NumericProperty(0.0)
-    vertical_fraction = NumericProperty(0.0)
-
-    # The current step is the animation step animating to, step remains during optionaly delay
-    # As soon as next step starts animating, step is incremented
-    step = NumericProperty(0)
-
-    def __init__(self, **kwargs):
-        self.vertices_states = []
-        self.previous_step = 0
-        self._animation = None
-        self._setup = False
-        super(MeshAnimator, self).__init__(**kwargs)
-
-
-    def add_vertices(self, vertices, duration=1.0, delay=None,
-                     horizontal_transition='linear', vertical_transition='linear', uv_change=False):
-        """Add a set of vertices.
-        duration: Seconds taken to reach vertices at this step.
-        delay: Seconds to delay before beginning next animation after this step.
-        horizontal|vertical_transition: transition to use when transferring to vertices at this step.
-
-        duration & delay can be number, function, or generator
-        TODO Implement uv_change if needed, currently u, v coordinates are never updated from the first step.
-        """
-        num = len(self.vertices_states)
-        if num > 0 and len(self.vertices_states[0].vertices) != len(vertices):
-            raise ValueError('Mismatched number of vertices: %d vs %d'%(num, len(vertices)))
-
-        self.vertices_states.append(VerticesState(vertices, duration, delay, horizontal_transition, vertical_transition) )
-
-
-    # TODO Maybe remove if not used much
-    def next_step(self):
-        "Get the next step, looping to 0 if at end"
-        step = self.step + 1
-        if step >= len(self.vertices_states):
-            step = 0
-
-        return step
-
-
-    def start_animation(self, step=None):
-        """Start animating to the specified step from the one previous.
-        If not specified, goes to next step (modifying step/previous_step)"""
-
-        # Idea: If needed, could add temporary animation that morphs from current Mesh.vertices
-
-        num_states = len(self.vertices_states)
-        if num_states < 2:
-            # raise instead?
-            return
-
-        if step is None:
-            step = self.next_step()
-
-        prev = step - 1
-        if prev < 0:
-            prev = num_states - 1
-
-        self.previous_step = prev
-        self._previous_step_vertices = self.vertices_states[prev].vertices
-        self.step = step
-        self._next_step_vertices = self.vertices_states[step].vertices
-
-        if not self._setup:
-            # Set initial vertices
-            # Currently, u,v come from step 0 and should never be updated again
-            self.mesh.vertices = list(self.vertices_states[0].vertices)
-
-            self._setup = True
-
-        state = self.vertices_states[self.step]
-        dur = evaluate_thing(state.duration)
-
-        # Setting properties will set vertices to previous_step
-        self.horizontal_fraction = 0.0
-        self.vertical_fraction = 0.0
-
-        # Go from 0 to 1 each time, try saving Animation
-        # PERF try keeping Animation instance, need to change transition/duration each time
-        a = Animation(horizontal_fraction=1.0, transition=state.horizontal_transition, duration=dur)
-        a &= Animation(vertical_fraction=1.0, transition=state.vertical_transition, duration=dur)
-        a.bind(on_complete=self.on_animation_complete)
-        self._animation = a
-        a.start(self)
-
-    def stop_animation(self):
-        if not self._animation:
-            return
-
-        # Don't want to call on_complete
-        self._animation.cancel(self)
-        self._animation = None
-
-
-    def on_animation_complete(self, anim, widget):
-        # Delay after current step
-        delay_thing = self.vertices_states[self.step].delay
-        if delay_thing:
-            Clock.schedule_once(self.start_animation, evaluate_thing(delay_thing))
-
-        else:
-            self.start_animation()
-
-
-    # def on_horizontal_fraction(self, *args):
-    #     print('on_horizontal_fraction', args)
-
-    # Note: This method is performance sensitive!
-    def on_vertical_fraction(self, widget, vert):
-
-        # Do all work in one event function for efficency (horizontal should have been updated before this because of creation order.
-        # TODO: Measure performance. Numpy math? Kivy Matrix math?
-
-        horiz = self.horizontal_fraction
-
-        in_verts = self._previous_step_vertices
-        out_verts = self._next_step_vertices
-
-        mesh = self.mesh
-        verts = mesh.vertices
-        # Skip central point, Go through by 4's
-        # Vertex lists conform to Mesh.vertices
-        # Perf: NumyPy able to calculate faster?
-        for x in range(0, len(in_verts), 4):
-            x_coord = (out_verts[x]-in_verts[x]) * horiz + in_verts[x]
-            y = x+1
-            y_coord = (out_verts[y]-in_verts[y]) * vert + in_verts[y]
-
-            verts[x] = x_coord
-            verts[y] = y_coord
-
-        mesh.vertices = verts
-
-
-
-
-class FloatLayoutStencilView(FloatLayout, StencilView):
-    pass
-
-# Issues:
-# Idea: Currently, ControlPoints scale with Scatter, could reverse/reduce this with an opposite Scale maybe.
-# ScatterPlane works by changing collide_point,
 
 class AnimationConstructor(Scatter):
     """Visual animation constructor.
@@ -184,21 +19,27 @@ class AnimationConstructor(Scatter):
 
     """
 
-    animation_data = ObjectProperty(None)
     control_points = ListProperty([])
-    animation_step = BoundedNumericProperty(0, min=0)
+    animation_step = StringProperty(setup_step)
     # Image can be moved and zoomed by user to allow more precise ControlPoint placement.
     move_resize = BooleanProperty(False)
-    animating = BooleanProperty(False)
+    animating = BooleanProperty(False)  # animating controlpoints
+    animate_changes = BooleanProperty(True)
+
     control_points_disabled = BooleanProperty(False)
     control_points_opacity = BoundedNumericProperty(1.0, min=0.0, max=1.0)
+    image_opacity = BoundedNumericProperty(1.0, min=0.0, max=1.0)
 
     def __init__(self, **kwargs):
         self.mesh_mode = 'triangle_fan'
+        self.setup_step = setup_step
         self.mesh_attached = False
         self._image_size_set = False
         self.mesh = None
-        self._previous_step = 0
+        # FIXME test state restore from different animation_step, trigger on_animation, check mesh_attched on CPs
+        self.animation_step = setup_step
+        self.steps = kwargs.get('steps', [self.animation_step]) # all steps
+        self._previous_step = self.animation_step
         self.faded_image_opacity = 0.5
         super(AnimationConstructor, self).__init__(**kwargs)
 
@@ -212,39 +53,140 @@ class AnimationConstructor(Scatter):
             self.mesh = Mesh(mode=self.mesh_mode)
 
 
-    def on_animation_data(self, widget, data):
+    def set_animation_data(self, data, animation_step=setup_step):
         """Resets AnimationConstructor, displays image centered"""
+        # data is a dictionary of image_filepath, vertices[], indices[]
+        # TODO code that creates MeshAnimator from this should be refactored
+        # This should update jelly_store; other code should read it and create the MeshAnimation
+
         # TODO Work on reseting state? Just create new instead?
 
         Logger.debug('animation_data set')
-        # self has default size at this point, sizing must be done in on_size
+        self.animate_changes = False
+        try:
+            # self has default size at this point, sizing must be done in on_size
 
-        with self.canvas:
-            # mipmap=True changes tex_coords and screws up calculations
-            # TODO Research mipmap more
-            cimage = CoreImage(data.bell_image_filename, mipmap=False)
+            with self.canvas:
+                # mipmap=True changes tex_coords and screws up calculations
+                # TODO Research mipmap more
+                cimage = CoreImage(data['image_filepath'], mipmap=False)
 
 
-        texture = cimage.texture
+            texture = cimage.texture
 
-        self.image.texture = texture
-        self.mesh.texture = texture
-        self.texture = texture
-        # TODO Position Image center/zoomed by default
-        # Nexus 10 Image is smaller, test density independent
-        # TODO Is there any benifit to Image vs Rectangle w/ Texture ?
+            self.image.texture = texture
+            self.mesh.texture = texture
+            self.texture = texture
+            # TODO Position Image center/zoomed by default
+            # Nexus 10 Image is smaller, test density independent
+            # TODO Is there any benifit to Image vs Rectangle w/ Texture ?
 
-        # No need for Image if we're not taking advantage of ratio maintaining code
-        #img = Image(texture=texture, keep_ratio=True, allow_stretch=True)
-        #img.bind(norm_image_size=self.on_norm_image_size)
-        #self.add_widget(img)
+            # No need for Image if we're not taking advantage of ratio maintaining code
+            #img = Image(texture=texture, keep_ratio=True, allow_stretch=True)
+            #img.bind(norm_image_size=self.on_norm_image_size)
+            #self.add_widget(img)
 
-        # Just set Scatter and Rectangle to texture size
-        self.image.size = texture.size
-        self.size = texture.size
-        # Will be positioned and scalled in on_parent_size
+            # Just set Scatter and Rectangle to texture size
+            self.image.size = texture.size
+            self.size = texture.size
+            # Will be positioned and scalled in on_parent_size
 
-        self.animation_step = 0
+
+            self.mesh_mode = data.get('mesh_mode', self.mesh_mode)
+            triangle_fan_mode = self.mesh_mode == 'triangle_fan'
+
+            self.animation_steps_order = data.get('steps_order', self.animation_steps_order)
+
+            # indices are actually recalculated, nowhere to set them
+            try:
+                steps = data['steps']
+            except KeyError:
+                # No steps defined, nothing to do
+                return
+
+            mesh = self.mesh
+
+            # Process step zero, create ControlPoints
+            step_zero = steps[setup_step]
+            verts = step_zero['vertices']
+            cps = []
+            num_verts = len(verts)
+            if num_verts == 0:
+                # Nothing else to do, everything below creates ControlPoints
+                return
+
+            # Not a fan of how much internal knowledge this code requires, but not worth refactoring too much now
+            # First-pass on setup_step
+            for x in range(1 if triangle_fan_mode else 0, num_verts/4):
+                # x,y pos
+                cp = ControlPoint()
+                cp.vertex_index = x
+                # Adjust index to position in vertices list
+                cp.positions[setup_step] = (verts[x*4], verts[x*4+1])
+                cps.append(cp)
+
+            # Note: items() in Py3
+            for step, step_data in steps.viewitems():
+                if step == setup_step:
+                    continue
+
+                self.steps.append(step)
+                verts = step_data['vertices']
+                if len(verts) != num_verts:
+                    raise ValueError('steps vertices different lengths!')
+
+                # Update ControlPoint.positions with this position/step
+                for cp in cps:
+                    index = cp.vertex_index
+                    cp.positions[step] = (verts[index*4], verts[index*4+1])
+
+            for cp in cps:
+                # cp.move_to_position_index(self.animation_step, animate=False)
+                cp.mesh = mesh  # set after so on_pos doesn't do anything
+                self.add_widget(cp)
+                # cp.update_trail_line()  # cp.on_pos calls this
+
+            self.control_points = cps
+
+            # Setting animation_step will move the ControlPoints for us and figure out mesh attachment
+            need_dispatch = self.animation_step == animation_step  # will need to dispatch if step doesn't change
+            self.animation_step = animation_step
+            if need_dispatch:
+                self.property('animation_step').dispatch(self)
+
+        finally:
+            self.animate_changes = True
+
+    def get_animation_data(self):
+        "Generate animation data for storage in store"
+
+        # animation_data vs control_point data
+        # first vertex is the triangle_fan point....
+        # just make that a visible unmoveable point?
+
+        # image_filepath (already set)
+        # indices[]
+        # steps:{STEP:{vertices:[]}
+
+        data = {}
+        steps = {}
+
+        data['mesh_mode'] = self.mesh_mode
+
+        for step in self.steps:
+            verts, indices = self.calc_mesh_vertices(step, update_mesh=False)
+            # indices always recalculated at the moment, but save for possible future use
+            if 'indices' not in data:
+                data['indices'] = indices
+
+            step_data = {}
+            step_data['vertices'] = verts
+
+            steps[step] = step_data
+
+        data['steps'] = steps
+        data['steps_order'] = self.animation_steps_order
+        return data
 
 
     def on_parent(self, _, parent):
@@ -285,46 +227,59 @@ class AnimationConstructor(Scatter):
         Logger.debug(self.__class__.__name__ + '.on_size %s', size)
         self.bbox_diagonal = (size[0]**2 + size[1]**2)**0.5
 
+
+    def on_image_opacity(self, _, opacity):
+        if self.animate_changes:
+            Animation(a=opacity).start(self.image_color)
+        else:
+            self.image_color.a = opacity
+
     def on_control_points(self, widget, points):
         # If on first animation step, Update mesh to preview Mesh cut
-        if self.animation_step == 0 and len(points) >= 3:
-            self.calc_mesh_vertices(step = 0)
+        if self.animation_step == setup_step and len(points) >= 3:
+            self.calc_mesh_vertices(step=setup_step)
 
             # Fade image a bit
             #if self.image.opacity > self.faded_image_opacity:
                 #Animation(opacity=self.faded_image_opacity).start(self.image)
 
-            Animation(a=self.faded_image_opacity).start(self.image_color)
+            self.image_opacity = self.faded_image_opacity
 
 
     def on_animation_step(self, widget, step):
-        """What step to activate.
-        0: Position points on image
-        1: Outer Bell
-        2: Closed Bell (Optional)
+        """animation_step changed.
+        move control points to step with animation
+        Set mesh_attached=False if on setup_step
         """
-        Logger.debug('on_animation_step %d', step)
+        Logger.debug('on_animation_step %s', step)
+        if not isinstance(step, basestring):
+            raise ValueError('animation_step must be a string, given %s'%step, type(step))
+
+        # Track all possible step keys
+        if step not in self.steps:
+            self.steps.append(step)
 
         resume_animation = self.animating
         if self.animating:
             # Switched step while previewing animation
             self.preview_animation(False)
 
-        if step == 0:
-            Animation(a=self.faded_image_opacity).start(self.image_color)
-            # Mesh will be detached after animation
+        if step == setup_step:
+            self.image_opacity = self.faded_image_opacity
+
+            # ControlPoints will detach mesh after animation in: move_control_points()
             self.mesh_attached = False
 
         else:
             # Not first animation step
-            Animation(a=0.0).start(self.image_color)
+            self.image_opacity = 0.0
 
             mesh = self.mesh
 
-            if self._previous_step == 0:
+            if self._previous_step == setup_step:
                 # Redo base vertices when moving from 0 to other
                 Logger.debug('Recalculating vertices/indices during transition from step 0')
-                self.calc_mesh_vertices(step = 0)
+                self.calc_mesh_vertices(step=setup_step)
 
             if not self.mesh_attached:
                 # attach before moving to other animation steps
@@ -333,8 +288,7 @@ class AnimationConstructor(Scatter):
 
                 self.mesh_attached = True
 
-
-        self.move_control_points(step, detach_mesh_after=step==0)
+        self.move_control_points(step, detach_mesh_after=step == setup_step)
 
         self._previous_step = step
 
@@ -343,12 +297,14 @@ class AnimationConstructor(Scatter):
 
     def calc_mesh_vertices(self, step = None, update_mesh = True):
         """Calculate Mesh.vertices and indices from the ControlPoints
-        If step omitted, vertices at current position, otherwise
-        vertices at that animation step.
-        Central vertice at center is added as first item in list
+        If step omitted, uses ControlPoints at current position, otherwise
+        vertices at that animation step (ControlPoint.positions[step]).
+        Central vertice at center is added as first item in list if mesh_mode=='triangle_fan'
 
         returns vertices, indices
         """
+        if step is not None and not isinstance(step, basestring):
+            raise ValueError('step must be a string')
 
         num = len(self.control_points)
         if num == 0:
@@ -371,7 +327,7 @@ class AnimationConstructor(Scatter):
         cent_y /= num
 
 
-        if triangle_fan_mode and step==0:
+        if triangle_fan_mode and step==setup_step:
             # Sort by angle from centroid in case user didn't place around perimeter in order
 
             cent_vec = Vector(cent_x, cent_y)
@@ -388,7 +344,8 @@ class AnimationConstructor(Scatter):
         # Create vertices list
         # centroid added as first vertex in triangle-fan mode
         start = 1 if triangle_fan_mode else 0
-        for index, cp in enumerate(self.control_points, start = start):
+        # enumerate always goes through all items, start is just where the count starts
+        for index, cp in enumerate(self.control_points, start=start):
             coords = cp.calc_vertex_coords(pos_index=step)
             # Need to calculate u, v centroid still
             cent_u += coords[2]
@@ -424,27 +381,15 @@ class AnimationConstructor(Scatter):
     def move_control_points(self, position_index, detach_mesh_after):
         "Move all of the Control Points to the specified position index"
         for cp in self.control_points:
-            cp.move_to_position_index(position_index, detach_mesh_after=detach_mesh_after)
+            cp.move_to_position_index(position_index, detach_mesh_after=detach_mesh_after, animate=self.animate_changes)
 
 
     def preview_animation(self, activate_preview=True):
         "Start/Stop animation preview"
 
         if activate_preview:
-            a = MeshAnimator()
+            a = MeshAnimator.from_animation_data(self.get_animation_data())
             a.mesh = self.mesh
-
-            bell_horiz_transition_out = 'in_back'
-            bell_vert_transition_out = 'out_cubic'
-            bell_horiz_transition_in = 'in_sine'
-            bell_vert_transition_in = 'out_back'
-            # TODO delay random.triangular(0.3, 2.0, 0.5)
-
-            # Iterate steps from 0 to the current one
-            for step in range(self.animation_step+1):
-                verts, _ = self.calc_mesh_vertices(step=step, update_mesh=False)
-                a.add_vertices(verts, duration=0.5, horizontal_transition='in_back', vertical_transition='out_cubic')
-
             self.mesh_animator = a
             self.animating = True
             a.start_animation()
@@ -540,18 +485,20 @@ class AnimationConstructor(Scatter):
 
             # No children or none close enough
 
-            if self.animation_step != 0:
+            if self.animation_step != setup_step:
                 # Only create ControlPoints in first step
                 return False
 
             # None were close enough, create a new ControlPoint
             ctrl_pt = ControlPoint()
             ctrl_pt.mesh = self.mesh
+            ctrl_pt.position_index = self.animation_step
 
             self.add_widget(ctrl_pt)
 
             # Use transformed coordinates
             ctrl_pt.pos = (transformed_x, transformed_y)
+
 
             # cp.vertex_index will be set within on_ctrl_points
             self.control_points.append(ctrl_pt)
@@ -582,6 +529,3 @@ class AnimationConstructor(Scatter):
     #     ret = super(AnimationConstructor, self).on_touch_up(touch)
     #     touch.pop()
     #     return ret
-
-
-

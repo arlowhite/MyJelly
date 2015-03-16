@@ -1,5 +1,3 @@
-__author__ = 'awhite'
-
 from kivy.uix.widget import Widget
 from kivy.graphics import Line, Canvas, Color
 from kivy.properties import NumericProperty
@@ -7,6 +5,7 @@ from kivy.animation import Animation
 from kivy.vector import Vector
 from kivy.metrics import dp
 
+__author__ = 'awhite'
 
 class Path:
     "Visual indication of a path to follow"
@@ -71,9 +70,9 @@ class ControlPoint(Widget):
         self.mesh_attached = False
 
         # Saved positions
-        self.positions = {0:(0,0)}
-        self.position_index = 0
-        self._animation = None
+        self.positions = {}
+        self.position_index = None
+        self._animation = None  # The Animation instance if animating
         self._detach_after_animation = False
 
         super(ControlPoint, self).__init__(**kwargs)
@@ -113,13 +112,13 @@ class ControlPoint(Widget):
             parent = self.parent
 
             # TODO Fix Hardcoded logic to animation step 0
-            if self.position_index == 0:
+            if self.position_index == self.setup_step:
                 # Parents boundary in local coords
                 self.x = min(max(0, x), parent.width)
                 self.y = min(max(0, y), parent.height)
 
             else:
-                origin = self.positions[0]
+                origin = self.positions[self.setup_step]
                 # Only allow moving if within this distance of first point
                 distance_limit = parent.bbox_diagonal
                 pos0v = Vector(origin)
@@ -156,12 +155,11 @@ class ControlPoint(Widget):
             return True
 
     def on_pos(self, widget, new_pos):
-        # Copy values instead of reference to pos
-        self.positions[self.position_index] = (self.x, self.y)
-        self.update_trail_line()
-        # print('ControlPoint.on_pos', new_pos)
-        # if self.parent:
-        #     print('ControlPoint vertice coords', self.calc_vertice_coords())
+        # Update position if not within animation
+        if not self._animation:
+            # Copy values instead of reference to pos
+            self.positions[self.position_index] = (self.x, self.y)
+            self.update_trail_line()
 
         if self.mesh and self.vertex_index != -1:
             i = self.vertex_index*4
@@ -184,35 +182,33 @@ class ControlPoint(Widget):
             parent.bind(scale=self.on_parent_scale)
             self.on_parent_scale(parent, parent.scale)
 
+        self.setup_step = parent.setup_step
+
     def on_parent_scale(self, _, scale):
         self.size = self.natural_size / scale, self.natural_size / scale
 
 
     def move_to_position_index(self, index, animate=True, detach_mesh_after = False):
-        if index < 0:
-            raise ValueError('index < 0')
-
         self.position_index = index
 
-        if index in self.positions:
-            if animate:
-                # No public method to re-use Animation, so just re-create
-                if self._animation is not None:
-                    self._animation.cancel(self)
+        pos = self.get_tex_coords(index)
 
-                self._detach_after_animation = detach_mesh_after
-                a = Animation(pos=self.positions[index], duration=0.7)
-                a.bind(on_complete=self._on_animate_complete, on_start=self._on_animate_start)
-                a.start(self)
-                self._animation = a
+        if animate:
+            # No public method to re-use Animation, so just re-create
+            if self._animation is not None:
+                self._animation.cancel(self)
 
-            else:
-                self.pos = self.positions[index]
+            self._detach_after_animation = detach_mesh_after
+            a = Animation(pos=pos, duration=0.4)
+            a.bind(on_complete=self._on_animate_complete, on_start=self._on_animate_start)
+            a.start(self)
+
         else:
-            # Position index not set before, save current position at index
-            self.positions[index] = (self.x, self.y)
+            self.pos = pos
+            if detach_mesh_after:
+                self.attach_mesh(False)
 
-            self.update_trail_line()
+        self.update_trail_line()
 
 
     def update_trail_line(self):
@@ -234,6 +230,7 @@ class ControlPoint(Widget):
 
     def _on_animate_start(self, anim, widget):
         self.disabled = True
+        self._animation = anim
 
     def _on_animate_complete(self, anim, widget):
         self.disabled = False
@@ -257,6 +254,11 @@ class ControlPoint(Widget):
             # Current location
             return self.x, self.y
         else:
+            # May not exist if ControlPoint.pos was never set while on this position
+            # However, needs a valid value for animation data serialization callers
+            if pos_index not in self.positions:
+                self.positions[pos_index] = (self.x, self.y)
+
             return self.positions[pos_index]
 
     def calc_vertex_coords(self, pos_index=None):
