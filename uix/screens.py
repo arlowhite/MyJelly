@@ -62,6 +62,19 @@ class JellyAnimationConstructorScreen(Screen):
             store[self.animation_name] = {'image_filepath': store['info']['image_filepath']}
 
         anim_const.set_animation_data(store[self.animation_name], animation_step=self.animation_step)
+        try:
+            anim_const.animate_changes = False
+            anim_const.scale = kwargs['scatter_scale']  # must set scale before pos, otherwise pos changes
+            anim_const.pos = kwargs['scatter_pos']
+            anim_const.autosize = False  # prevent parent size change from changing pos/scale again
+
+            self.ids.move_resize_switch.active = kwargs['move_resize']
+            self.ids.animate_toggle.state = kwargs['animate_toggle_state']
+            anim_const.animate_changes = True
+
+        except KeyError:
+            pass
+
         self.ids.animation_step_spinner.text_value = self.animation_step
 
 
@@ -88,7 +101,11 @@ class JellyAnimationConstructorScreen(Screen):
         # Jelly state is stored separately
         self.on_leave()
 
-        return dict(jelly_id=self.jelly_id, animation_step=self.animation_step)
+        ac = self.ids.animation_constructor
+        return dict(jelly_id=self.jelly_id, animation_step=self.animation_step,
+                    scatter_pos=ac.pos, scatter_scale=ac.scale,
+                    move_resize=ac.move_resize,
+                    animate_toggle_state=self.ids.animate_toggle.state)
 
 
 class NewJellyScreen(Screen):

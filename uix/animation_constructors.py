@@ -31,6 +31,7 @@ class AnimationConstructor(Scatter):
     image_opacity = BoundedNumericProperty(1.0, min=0.0, max=1.0)
 
     def __init__(self, **kwargs):
+        self.autosize = True
         self.mesh_mode = 'triangle_fan'
         self.setup_step = setup_step
         self.mesh_attached = False
@@ -193,6 +194,10 @@ class AnimationConstructor(Scatter):
         parent.bind(size=self.on_parent_size)
 
     def on_parent_size(self, widget, size):
+        if not self.autosize:
+            # Other code will set pos/scale
+            return
+
         Logger.debug(self.__class__.__name__ + '.on_parent_size %s', size)
         p_width, p_height = size
 
@@ -423,9 +428,20 @@ class AnimationConstructor(Scatter):
             cp.disabled = disable
 
     def on_control_points_opacity(self, _, opacity):
-        a = Animation(duration=0.5, opacity=opacity)
-        for cp in self.control_points:
-            a.start(cp)
+        if hasattr(self, '_control_point_opacity_animation'):
+            for cp in self.control_points:
+                self._control_point_opacity_animation.cancel(cp)
+
+            self._control_point_opacity_animation = None
+
+        if self.animate_changes:
+            a = Animation(duration=0.5, opacity=opacity)
+            for cp in self.control_points:
+                a.start(cp)
+            self._control_point_opacity_animation = a
+        else:
+            for cp in self.control_points:
+                cp.opacity=opacity
 
     def on_touch_down(self, touch):
 
