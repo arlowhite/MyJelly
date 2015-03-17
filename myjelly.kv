@@ -31,7 +31,7 @@
                     title: 'Pick Jelly Image'
                     on_press: app.open_screen('JellySelectionScreen')
 
-
+# TODO display path
         FileChooserIconView:
             id: filechooser
             dirselect: False
@@ -43,61 +43,55 @@
             #filters: ['*.png', '*.jpg']
 
 
+#:import OpacityScrollEffect kivy.effects.opacityscroll.OpacityScrollEffect
 
 # RelativeLayout
 <JellySelectionScreen>:
+    BoxLayout:
+        orientation: 'vertical'
 
-    ActionBar:
-        id: action_bar
-        top: root.top
-        size_hint_y: None
-
-        ActionView:
-            ActionPrevious:
-                title: 'Jellies'
-
-            ActionButton:
-                text: '+ New Jelly'
-                on_press: app.open_screen('NewJellyScreen')
-
-        #ActionPrevious:
-        #ActionButton
-
-    # TODO Gridlayout for bigger screens?
-    # TODO List selection stuff instead?
-
-    ScrollView:
-        pos: 0, 0
-        #top: action_bar.y
-        height: action_bar.y
-
-        size_hint_y: None
-#        canvas:
-#            Rectangle:
-#                pos: self.pos
-#                size: self.size
-
-# GridLayout does not expand its size, so need to calculate its height.
-        GridLayout:
-            id: jelly_grid
+        ActionBar:
+            id: action_bar
             size_hint_y: None
-            height: 3*cm(8)
-        # TODO Increase based on screen size
-            cols: 1
-            #row_default_height: cm(5)
-            #row_force_default: True
-            spacing: 5, 5
+
+            ActionView:
+                ActionPrevious:
+                    title: 'Jellies'
+                    on_press: app.open_screen('JellyEnvironmentScreen')
+
+                ActionButton:
+                    text: '+ New Jelly'
+                    on_press: app.open_screen('NewJellyScreen')
+
+
+        # TODO Gridlayout for bigger screens?
+        # TODO List selection stuff instead?
+
+        ScrollView:
+            effect_cls: OpacityScrollEffect
+
+            GridLayout:
+                id: jelly_grid
+
+                size_hint_y: None  # Let it be as big as needed for ScrollView
+                height: self.minimum_height  # See ScrollView api docs
+
+            # TODO Increase based on screen size
+                cols: 1
+                #row_default_height: cm(5)
+                #row_force_default: True
+                spacing: 5, 5
 
 
 <JellySelectButton>:
 
     on_release: app.open_screen('JellyAnimationConstructorScreen', {'jelly_id': root.jelly_id})
 
-    #size_hint_y: None
-    #height: self.width
-    # TODO padding?
+    height: cm(6)
+    size_hint_y: None
 
     Image:
+        id: image
         source: root.image_filename
         pos: root.pos
         size: root.size

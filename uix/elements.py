@@ -14,10 +14,15 @@ class JellySelectButton(Button):
     "Selection button displayed in JellySelectionScreen"
     # Note: Button binding done in KV
 
-    def __init__(self, jelly_id, image_filename, **kwargs):
-        self.jelly_id = jelly_id
-        self.image_filename = image_filename
+    def __init__(self, jelly_store, **kwargs):
+        self.store = jelly_store
+        info = jelly_store['info']
+        self.jelly_id = info['id']
+        self.image_filename = info['image_filepath']
+
         super(JellySelectButton, self).__init__(**kwargs)
+
+
 
 
 class FloatLayoutStencilView(FloatLayout, StencilView):

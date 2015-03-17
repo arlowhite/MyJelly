@@ -20,6 +20,14 @@ class JellyEnvironmentScreen(Screen):
     Tap anywhere to pause and bring-up menu to take car of Jelly
     and get to other screens.
     """
+    # FIXME for now we're crazy and showing all Jellies
+
+    def __init__(self):
+        for store in load_all_jellies():
+            pass
+
+
+
 
 class JellySelectionScreen(Screen):
     "Displays all user's Jellies and option to create new ones"
@@ -34,8 +42,7 @@ class JellySelectionScreen(Screen):
         # TODO StackLayout instead?
         grid = self.ids.jelly_grid
         for jdata in jelly_stores:
-            info = jdata['info']
-            grid.add_widget(JellySelectButton(info['id'], info['image_filepath']))
+            grid.add_widget(JellySelectButton(jdata))
 
 class JellyAnimationConstructorScreen(Screen):
     """Modify the Mesh animation for the selected Jelly.
@@ -113,18 +120,24 @@ class NewJellyScreen(Screen):
     def __init__(self, **kwargs):
         super(NewJellyScreen, self).__init__(**kwargs)
 
-        # TODO if os is android/linux/etc
-        # if platform=='android'
         fc = self.ids.filechooser
-        home = P.expanduser('~')
-        # Don't allow navigating above home
-        fc.rootpath = home
 
-        p = P.join(home, 'Pictures')
-        if P.isdir(p):
-            fc.path = p
+        # TODO if os is android/linux/etc
+        if platform=='android':
+            # TODO is /sdcard standard across all android?
+            fc.path = '/sdcard'
+
         else:
-            fc.path = home
+            home = P.expanduser('~')
+            # Don't allow navigating above home
+            # Seems like an unecessary limitation...
+            # fc.rootpath = home
+
+            p = P.join(home, 'Pictures')
+            if P.isdir(p):
+                fc.path = p
+            else:
+                fc.path = home
 
         fc.bind(selection=self.on_selection)
 
