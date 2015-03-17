@@ -5,6 +5,8 @@ from kivy.animation import Animation
 from kivy.vector import Vector
 from kivy.metrics import dp
 
+from animations import setup_step
+
 __author__ = 'awhite'
 
 class Path:
@@ -68,6 +70,7 @@ class ControlPoint(Widget):
         self.mesh = None
         self.vertex_index = -1
         self.mesh_attached = False
+        self.moved_point_trigger = kwargs['moved_point_trigger']
 
         # Saved positions
         self.positions = {}
@@ -112,13 +115,13 @@ class ControlPoint(Widget):
             parent = self.parent
 
             # TODO Fix Hardcoded logic to animation step 0
-            if self.position_index == self.setup_step:
+            if self.position_index == setup_step:
                 # Parents boundary in local coords
                 self.x = min(max(0, x), parent.width)
                 self.y = min(max(0, y), parent.height)
 
             else:
-                origin = self.positions[self.setup_step]
+                origin = self.positions[setup_step]
                 # Only allow moving if within this distance of first point
                 distance_limit = parent.bbox_diagonal
                 pos0v = Vector(origin)
@@ -161,28 +164,31 @@ class ControlPoint(Widget):
             self.positions[self.position_index] = (self.x, self.y)
             self.update_trail_line()
 
-        if self.mesh and self.vertex_index != -1:
-            i = self.vertex_index*4
-            verts = self.mesh.vertices
-            x, y, u, v = self.calc_vertex_coords()
-            try:
-                verts[i], verts[i+1] = x, y
-                if not self.mesh_attached:
-                    # Also update u, v
-                    verts[i+2], verts[i+3] = u, v
+        self.moved_point_trigger()
 
-                # Trigger update
-                self.mesh.vertices = verts
-
-            except IndexError:
-                pass
+        # Want to preview centroid update so need to re-run calc anyway
+        # parent now sets-up a trigger
+        # TODO refactor: may as well forget whole attached_mesh thing?
+        # if self.mesh and self.vertex_index != -1:
+            # i = self.vertex_index*4
+            # verts = self.mesh.vertices
+            # x, y, u, v = self.calc_vertex_coords()
+            # try:
+            #     verts[i], verts[i+1] = x, y
+            #     if not self.mesh_attached:
+            #         # Also update u, v
+            #         verts[i+2], verts[i+3] = u, v
+            #
+            #     # Trigger update
+            #     self.mesh.vertices = verts
+            #
+            # except IndexError:
+            #     pass
 
     def on_parent(self, _, parent):
         if hasattr(parent, 'scale'):
             parent.bind(scale=self.on_parent_scale)
             self.on_parent_scale(parent, parent.scale)
-
-        self.setup_step = parent.setup_step
 
     def on_parent_scale(self, _, scale):
         self.size = self.natural_size / scale, self.natural_size / scale
@@ -224,6 +230,10 @@ class ControlPoint(Widget):
         indices.sort()
         points = []
         for index in indices:
+            if index == setup_step:
+                # TODO hackish way to define line, design better
+                continue
+
             points.extend(self.positions[index])
 
         self.trail_line.points = points

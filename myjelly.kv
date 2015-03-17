@@ -18,12 +18,29 @@
 
 
 <NewJellyScreen>:
-    FileChooserIconView:
-        id: filechooser
-        dirselect: False
+    BoxLayout:
+        orientation: 'vertical'
 
-        # FIXME filters are case-sensitive
-        #filters: ['*.png', '*.jpg']
+        ActionBar:
+            id: action_bar
+#            top: root.top
+            size_hint_y: None
+
+            ActionView:
+                ActionPrevious:
+                    title: 'Pick Jelly Image'
+                    on_press: app.open_screen('JellySelectionScreen')
+
+
+        FileChooserIconView:
+            id: filechooser
+            dirselect: False
+            # Did not work, did BoxLayout instead
+    #        height: action_bar.y
+            #top: action_bar.y
+
+            # FIXME filters are case-sensitive
+            #filters: ['*.png', '*.jpg']
 
 
 
@@ -94,6 +111,7 @@
         orientation: 'vertical'
 
         ActionBar:
+            id: action_bar
             top: root.top
             size_hint_y: None
 
@@ -226,8 +244,6 @@
     halign: 'center'
     # FIXME No effect
     valign: 'middle'
-
-
 
 <ControlPoint>:
     # For simplicity, pos is the center of the image, collide_point is not used

@@ -172,7 +172,12 @@ class MyJellyApp(App):
         if not issubclass(screen_class, Screen):
             raise ValueError('%s is not a Screen!'%screen)
 
+        current_screen = self.screen_manager.current_screen
+        if hasattr(current_screen, 'get_state'):
+            current_screen.get_state()
+
         s = screen_class(**screen_args) if screen_args else screen_class()
+
         # TODO left/right decision, sort screens?
         self.screen_manager.switch_to(s)
 

@@ -1,5 +1,6 @@
 from kivy import Logger
 from kivy.animation import Animation
+from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
 from kivy.graphics.context_instructions import Color
 from kivy.graphics.vertex_instructions import Rectangle, Mesh
@@ -42,6 +43,8 @@ class AnimationConstructor(Scatter):
         self.steps = kwargs.get('steps', [self.animation_step]) # all steps
         self._previous_step = self.animation_step
         self.faded_image_opacity = 0.5
+        self._moved_control_point_trigger = Clock.create_trigger(self.on_control_point_moved)
+
         super(AnimationConstructor, self).__init__(**kwargs)
 
         self.bind(move_resize=self.decide_disable_control_points, animating=self.decide_disable_control_points)
@@ -120,7 +123,7 @@ class AnimationConstructor(Scatter):
             # First-pass on setup_step
             for x in range(1 if triangle_fan_mode else 0, num_verts/4):
                 # x,y pos
-                cp = ControlPoint()
+                cp = ControlPoint(moved_point_trigger=self._moved_control_point_trigger)
                 cp.vertex_index = x
                 # Adjust index to position in vertices list
                 cp.positions[setup_step] = (verts[x*4], verts[x*4+1])
@@ -149,6 +152,8 @@ class AnimationConstructor(Scatter):
 
             self.control_points = cps
 
+            self._previous_step = setup_step  # on_animation_step will reset mesh
+
             # Setting animation_step will move the ControlPoints for us and figure out mesh attachment
             need_dispatch = self.animation_step == animation_step  # will need to dispatch if step doesn't change
             self.animation_step = animation_step
@@ -173,8 +178,15 @@ class AnimationConstructor(Scatter):
         steps = {}
 
         data['mesh_mode'] = self.mesh_mode
+        data['steps_order'] = self.animation_steps_order
 
-        for step in self.steps:
+        # Make sure all required steps are available, even if we this hasn't shown them yet.
+        step_set = set(self.animation_steps_order)
+        if setup_step not in step_set:
+            step_set.add(setup_step)
+
+
+        for step in step_set:
             verts, indices = self.calc_mesh_vertices(step, update_mesh=False)
             # indices always recalculated at the moment, but save for possible future use
             if 'indices' not in data:
@@ -186,7 +198,6 @@ class AnimationConstructor(Scatter):
             steps[step] = step_data
 
         data['steps'] = steps
-        data['steps_order'] = self.animation_steps_order
         return data
 
 
@@ -250,6 +261,9 @@ class AnimationConstructor(Scatter):
 
             self.image_opacity = self.faded_image_opacity
 
+    def on_control_point_moved(self, _):
+        # one or more ControlPoints moved
+        self.calc_mesh_vertices(preserve_uv=self.animation_step!=setup_step)
 
     def on_animation_step(self, widget, step):
         """animation_step changed.
@@ -284,7 +298,7 @@ class AnimationConstructor(Scatter):
             if self._previous_step == setup_step:
                 # Redo base vertices when moving from 0 to other
                 Logger.debug('Recalculating vertices/indices during transition from step 0')
-                self.calc_mesh_vertices(step=setup_step)
+                self.calc_mesh_vertices(step=setup_step, preserve_uv=False)
 
             if not self.mesh_attached:
                 # attach before moving to other animation steps
@@ -300,11 +314,13 @@ class AnimationConstructor(Scatter):
         if resume_animation:
             self.preview_animation()
 
-    def calc_mesh_vertices(self, step = None, update_mesh = True):
+    def calc_mesh_vertices(self, step = None, update_mesh=True, preserve_uv=True):
         """Calculate Mesh.vertices and indices from the ControlPoints
         If step omitted, uses ControlPoints at current position, otherwise
         vertices at that animation step (ControlPoint.positions[step]).
         Central vertice at center is added as first item in list if mesh_mode=='triangle_fan'
+        preserve_uv: Do not overwrite the uv coordinates in the current Mesh.vertices
+        (only has an effect if update_mesh==True and vertices are already set)
 
         returns vertices, indices
         """
@@ -378,7 +394,22 @@ class AnimationConstructor(Scatter):
             indices = range(num)
 
         if update_mesh:
-            self.mesh.vertices = verts
+            mesh_verts = self.mesh.vertices
+            num_mesh_verts = len(mesh_verts)
+
+            if preserve_uv and num_mesh_verts > 0:
+                assert num_mesh_verts == len(verts)
+
+                # Only overwrite x, y mesh coords
+                for x in range(0, num_mesh_verts, 4):
+                    mesh_verts[x] = verts[x]
+                    mesh_verts[x+1] = verts[x+1]
+
+                self.mesh.vertices = mesh_verts
+
+            else:
+                self.mesh.vertices = verts
+
             self.mesh.indices = indices
 
         return verts, indices
@@ -506,7 +537,7 @@ class AnimationConstructor(Scatter):
                 return False
 
             # None were close enough, create a new ControlPoint
-            ctrl_pt = ControlPoint()
+            ctrl_pt = ControlPoint(moved_point_trigger=self._moved_control_point_trigger)
             ctrl_pt.mesh = self.mesh
             ctrl_pt.position_index = self.animation_step
 
