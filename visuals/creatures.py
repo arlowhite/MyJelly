@@ -1,5 +1,9 @@
 __author__ = 'awhite'
 
+import random
+from math import cos, sin, radians
+
+from kivy.logger import Logger
 from kivy.graphics import Rectangle, Triangle, Color, Rotate, Translate, InstructionGroup, PushMatrix, PopMatrix, \
     PushState, PopState, Canvas, Mesh, Scale
 from kivy.vector import Vector
@@ -14,8 +18,7 @@ from kivy.graphics.instructions import InstructionGroup
 from kivy.clock import Clock
 
 from drawn_visual import ControlPoint
-
-import random
+from animations import MeshAnimator, setup_step
 
 
 # Don't think I want event dispatch, not needed for every creature and will be too much
@@ -23,25 +26,30 @@ import random
 # In Sacrifical Creatures I didn't want the overhead of Widgets, but in this game
 # I'll try them out since it should make things easier and provide some practice
 
+# TODO Probably just do EventDispatcher instead of Widget? Performance test # of Jellies limit
+# Single animation update loop instead of Animation Clocks for each? or chain Animations? &=
 class Creature(Widget):
     "Something that moves every clock tick"
 
+    scale = NumericProperty(1.0)
+
+    # angle in degrees
+    # 0 points up, positive is counter-clockwise
+    angle = NumericProperty(0.0)
+
+    speed = NumericProperty(0.0)
+
     def __init__(self, **kwargs):
+        self.angle_radians = 0
         super(Creature, self).__init__(**kwargs)
 
         # self.pos = Vector(100, 100)
-
-        self.angle = 0
 
         # FIXME Does velocity vector belong here?
         self.vel = Vector(0, 0)
         self.vel_y = 1
 
         self.draw()
-
-        # on_X auto binds
-        #self.bind(pos=self.update_pos)
-
 
     def draw(self):
         with self.canvas.before:
@@ -52,42 +60,75 @@ class Creature(Widget):
             PopMatrix()
             PopState()
 
-
         with self.canvas:
-            Color(1, 1, 1, 1)
+            self._color = Color(1, 1, 1, 1)
+
+            # Control size without recalculating vertices
+            self._scale = Scale(1, 1, 1)
 
             self._trans = Translate()
             self._trans.xy = self.pos
 
-
-            # self._rot = Rotate()
-            # self._rot.angle = self.angle
-            # mycanvas.add(self._rot)
+            self._rot = Rotate()
+            self._rot.angle = self.angle
 
             self.draw_creature()
 
     def on_pos(self, jelly_obj, coords):
         self._trans.xy = coords
 
+    def on_scale(self, _, scale):
+        # TODO what does z do for 2D?
+        self._scale.xyz = (scale, scale, 1.0)
 
-    def set_angle(self, angle):
-        self.angle = angle
+    def on_angle(self, _, angle):
+        self.angle_radians = radians(angle)
         self._rot.angle = angle
-        self.canvas.ask_update()
+        # FIXME angle%360? or -180 to 180  see what Scale does
+        self.canvas.ask_update()  # TODO update necessary?
 
     def update(self, dt):
-        # FIXME Better to always call update on all creatures, or schedule individually? Behavior control?
-        # Velocity within Behavior code?
-        # vel = Vector(0,0)
-        self.pos += self.vel * dt
-        self._trans.xy = self.pos
-        #self._rot.angle += 1
-        # best way to do this?
-        #self._rot.angle %= 360
+        # Want to avoid creating many Vector objects?
+        # Vector operations creating new: rotate(), *
+        # Modify self: *=
 
-        self.update_creature()
+        # Possibilities
+        # pos_vec += velocity_vec * dt  (velocity_vec angle
 
-        self.canvas.ask_update()
+        # Rotate vector by angle each time
+        # No Vector() creation
+        # velocity_vec[0] = 0
+        # velocity_vec[1] = speed*dt
+        # TODO Vector rotates same way?
+        # pos_vec += velocity_vec.rotate(angle, self=True)  # would need to modify rotate
+
+        # Vectors involve object creation and function calls. Just do the math myself
+
+        move = self.speed * dt  # How many pixels to move along velocity vector
+        #  +counter-clockwise (axis vertical)
+
+        x = self.x - sin(self.angle_radians)
+        y = self.y + cos(self.angle_radians)
+
+        parent = self.parent
+        if y > parent.height:
+            y = 1
+
+        if y < 0:
+            y = parent.height - 1
+
+        if x > parent.width:
+            x = 1
+
+        if x < 0:
+            x = parent.width - 1
+
+        self.pos = (x, y)
+
+        # Needed at all?
+        # update_creature()
+
+        # self.canvas.ask_update()
 
         #self.shape.pos = self.pos
 
@@ -100,196 +141,68 @@ class Creature(Widget):
 
 class Jelly(Creature):
 
-    scale = NumericProperty(1.0)
-
-    bell_horizontal = NumericProperty(0.0)
-    bell_vertical = NumericProperty(0.0)
-
-    # in a bit, then out
-    bell_horiz_transition_out = 'in_back'
-    bell_vert_transition_out = 'out_cubic'
-    bell_horiz_transition_in = 'in_sine'
-    bell_vert_transition_in = 'out_back'
-
     def __init__(self, **kwargs):
 
-        self.texture = None
-        self._flip_texture_vertical = False
-        self._bell_animation = None
+        self._bell_animator = None
+
+        # Ideally Animation would be more abstract
+        # However, this game focuses only on Jellies
+        # So it's much easier to hard-code the knowledge of bell pulses, tentacle drift, etc.
+        self.store = kwargs.get('jelly_store')
 
         super(Jelly, self).__init__(**kwargs)
 
-
-        # The texture coordinate dimensions I choose could be anything if I just Scale() instead of
-        # recalculating them for size changes, so I'll just use the Image.size
-
-        w = self.texture_img.width
-        h = self.texture_img.height
-
-
-        # Initial simple vertices
-        vertices = []
-        # u,v pos are 0 to 1.0
-        vertices.extend((w / 2, h / 2, 0.5, 0.5))
-        vertices.extend((0, 0, 0, 0))
-        vertices.extend((0, h, 0, 1))
-        vertices.extend((w, h, 1, 1))
-        vertices.extend((w, 0, 1, 0))
-
-        # tex_coords [u, v, u + w, v, u + w, y + h, u, y + h]
-        # No effect: tex_coords=(0.0, 0.0, 1.0, 0.0, 1.0, -1.0, 0.0, -1.0)
-
-        # mode: Can be one of points, line_strip, line_loop, lines, triangles, triangle_strip or triangle_fan.
-
-        self.update_mesh_vertices(vertices)
-        self.on_scale(self, self.scale)
-
-
-        #self.bind(size=self.on_size)
-
-
-        #self.texture_img = CoreImage('media/images/jelly.png')
-
-        #self.texture_img.texture.flip_vertical()
-
-
-
-    #def draw_creature_before(self):
-
-
-#        print(im.texture.tex_coords)
-
-
-
-        #self.texture_img.texture.tex_coords = (0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0)
-        #uvpos 0.0, 1.0
-        #uvsize 10., -1.0
-        #tex_coords (0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0)
-
-    def load_image(self):
-        # self.texture_img = CoreImage('media/images/jelly.png')
-        #self.texture_img = texture_img
-
-        im = ImageLoader.load('media/images/jelly.png')
-        # Texture is and should be flipped, however, Mesh does not use Texture.tex_coords
-        # Created bug on GitHub/kivy
-
-        # Prevent tex_coords flip
-        #im._data[0].flip_vertical = False
-        self.texture_img = im
-        texture = im.texture
-        self.texture = texture
-        # flip_vertical=True  (0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0)
-        # flip_vertical=False (0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0)
-        if texture.tex_coords==(0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0):
-            # Image tex_coords was flipped vertically
-            # Could flip in texture itself and set tex_coords to normal, but it's a bit harder
-            self._flip_texture_vertical = True
-
     def draw_creature(self):
-        self.load_image()
+        # called with canvas
+        store = self.store
+        anim = store['bell_animation']
+        mesh_mode = str(anim['mesh_mode'])
+        if mesh_mode != 'triangle_fan':
+            raise ValueError('Need to calc centroid in other modes')
 
-        # Control size without recalculating vertices
-        self._mesh_scale = Scale(1, 1, 1)
+        # first vertex to be used for centroid
+        # centroid = anim['centroid']  # FUTURE: define centroid in data?
+        verts = anim['steps'][setup_step]['vertices']
 
-        self.mesh = Mesh(mode='triangle_fan', texture=self.texture)
+        # Draw centered at pos for Scale/Rotation to work correctly
+        PushMatrix()
 
+        adjustment = (-verts[0], -verts[1])
+        Logger.debug('Jelly: centering adjustment %s', adjustment)
+        # Translate(xy=adjustment)
+        t = Translate()
+        t.xy = adjustment
 
-    def update_mesh_vertices(self, vertices):
-        "Create/Recreate mesh, indices loops around to 2nd vertex for you"
+        img = CoreImage(anim['image_filepath'])
+        mesh = Mesh(mode=mesh_mode, texture=img.texture)
+        a = MeshAnimator.from_animation_data(anim)
+        a.mesh = mesh
+        a.start_animation()
+        self._bell_animator = a
 
-        # TODO u,v coords don't seem to be affected by Scale when changed, need to invert coords
-        if self._flip_texture_vertical:
-            for i in range(0, len(vertices), 4):
-                # v coord
-                v = vertices[i+3]
-                vertices[i+3] = 1-v
+        PopMatrix()
 
-        indices = range(len(vertices)/4)
-        indices.append(1)
+        # Visualize pos point
+        Color(rgba=(1, 0, 0, 0.6))
+        x = 6
+        Triangle(points=(-x, -x, x, -x, 0, x))
 
-        self.mesh.vertices = vertices
-        self.mesh.indices = indices
-
-    def set_bell_animation_vertices(self, in_vertices, out_vertices):
-        "Set the Bell Mesh vertices at inward and outward position."
-        if len(in_vertices) != len(out_vertices):
-            raise ValueError('Unequal vertice lengths!')
-
-        if len(in_vertices) != len(self.mesh.vertices)/2:
-            raise ValueError('Animation vertices not half the Mesh.vertices')
-
-        self._in_bell_vertices = in_vertices
-        self._out_bell_vertices = out_vertices
-
-    def animate_bell(self, dt=None):
-        if self._bell_animation:
-            self._bell_animation.cancel_all(self)
-
-        a = Animation(bell_horizontal=1.0, t=Jelly.bell_horiz_transition_out, duration=1.0)
-        a &= Animation(bell_vertical=1.0, t=Jelly.bell_vert_transition_out, duration=1.0)
-
-        a += (Animation(bell_horizontal=0.0, t=Jelly.bell_horiz_transition_in, duration=0.5)
-              & Animation(bell_vertical=0.0, t=Jelly.bell_vert_transition_in, duration=0.5))
-
-        a.bind(on_complete=self.bell_pulse_complete)
-        a.start(self)
-        self._bell_animation = a
-
+    # TODO thing about what is controled in MeshAnimation vs Creature
     def bell_pulse_complete(self, anim_seq, widget):
         Clock.schedule_once(self.animate_bell, random.triangular(0.3, 2.0, 0.5))
 
-    def on_bell_vertical(self, widget, vert):
-        # Do all work in one event function for efficency (bell_horizontal should have been updated before this.
-        # TODO: Measure performance. Numpy math? Kivy Matrix math?
+    # def update_creature(self):
+    #     pass
 
-        horiz = self.bell_horizontal
-
-        in_verts = self._in_bell_vertices
-        out_verts = self._out_bell_vertices
-
-        mesh = self.mesh
-        verts = mesh.vertices
-        # Skip central point, Go through by 2's
-        for x in range(0, len(in_verts), 2):
-            x_coord = (out_verts[x]-in_verts[x]) * horiz + in_verts[x]
-            y = x+1
-            y_coord = (out_verts[y]-in_verts[y]) * vert + in_verts[y]
-
-            verts[x*2] = x_coord
-            verts[x*2 + 1] = y_coord
-
-        mesh.vertices = verts
-
-
-    def update_creature(self):
-        # self.vertices[5] += 1
-        #verts = list(self.vertices)
-        # verts = self.mesh.vertices
-        # verts[8] += 1
-        # verts[9] += 1
-        # self.mesh.vertices = verts
-
-        # Tests
-        #self.x += 1
-        #self.size = (self.width-1, self.height-1)
-        #self.scale*=1.1
-
-        if self.y > self.parent.height:
-            self.y = 0
-
-        if self.x > self.parent.width:
-            self.x = 0
-
-
-    def on_size(self, widget, new_size):
-        if hasattr(self, '_mesh_scale'):
-            # Scale the Mesh relative to the Image size vertices were created with
-            self._mesh_scale.xyz = (new_size[0] / self.texture_img.width, new_size[1] / self.texture_img.height, 1)
-
-        if hasattr(self, '_mesh_trans'):
-            # flip_vertical correction needs to update Translate when height changes
-            self._mesh_trans.y = new_size[1]
-
-    def on_scale(self, widget, new_scale):
-        self.size = (self.texture_img.width * self.scale, self.texture_img.height * self.scale)
+    # FIXME Old code: React to size or not?
+    # def on_size(self, widget, new_size):
+    #     if hasattr(self, '_mesh_scale'):
+    #         # Scale the Mesh relative to the Image size vertices were created with
+    #         self._mesh_scale.xyz = (new_size[0] / self.texture_img.width, new_size[1] / self.texture_img.height, 1)
+    #
+    #     if hasattr(self, '_mesh_trans'):
+    #         # flip_vertical correction needs to update Translate when height changes
+    #         self._mesh_trans.y = new_size[1]
+    #
+    # def on_scale(self, widget, new_scale):
+    #     self.size = (self.texture_img.width * self.scale, self.texture_img.height * self.scale)

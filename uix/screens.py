@@ -2,14 +2,18 @@ __author__ = 'awhite'
 
 import os.path as P
 import uuid
+import random
 
 from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
 from kivy.app import App
+from kivy.clock import Clock
 from kivy.utils import platform
 from kivy.logger import Logger
 from kivy.properties import StringProperty
+from kivy.animation import Animation
 
 from visuals.animations import setup_step
+from visuals.creatures import Jelly
 from uix.elements import JellySelectButton
 from uix.animation_constructors import AnimationConstructor
 
@@ -22,10 +26,49 @@ class JellyEnvironmentScreen(Screen):
     """
     # FIXME for now we're crazy and showing all Jellies
 
-    def __init__(self):
-        for store in load_all_jellies():
-            pass
+    def __init__(self, **kwargs):
+        super(JellyEnvironmentScreen, self).__init__(**kwargs)
 
+    def on_size(self, _, size):
+        if size == [1, 1]:
+            return
+
+        self.initialize()
+        self.unbind(size=self.on_size)
+
+    def initialize(self):
+        "called after size set once"
+        Logger.debug('%s: initialize()', self.__class__.__name__)
+
+        for store in load_all_jellies():
+            for x in range(3):
+                Logger.debug('Creating Jelly %s', store['info']['id'])
+                j = Jelly(jelly_store=store)
+                j.speed = random.uniform(0, 10.0)
+                j.scale = random.uniform(0.25, 2.0)
+                j.angle = random.randint(-180, 180)
+                j.pos = (random.randint(10, self.width), random.randint(10, self.height))
+                self.add_widget(j)
+
+        Clock.schedule_interval(self.clock_tick, 1 / 60.0)
+        Clock.schedule_interval(self.change_behavior, 5)
+
+
+    def change_behavior(self, dt):
+        for c in self.children:
+            angle = c.angle + random.randint(-45, 45)
+            Animation(angle=angle, duration=3.0, step=1./30.).start(c)
+
+    def clock_tick(self, dt):
+        for c in self.children:
+            c.update(dt)
+
+    def pause(self):
+        Clock.unschedule(self.clock_tick)
+
+    # TODO UI for leaving Environment screen
+    def on_touch_down(self, touch):
+        App.get_running_app().open_screen('JellySelectionScreen')
 
 
 

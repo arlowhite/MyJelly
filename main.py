@@ -21,58 +21,6 @@ from uix.hacks_fixes import *
 from uix.animation_constructors import AnimationConstructor
 
 
-class MyJellyGame(Widget):
-
-    def __init__(self):
-        super(MyJellyGame, self).__init__()
-
-        self.started = False
-
-        self.pressed_once = False
-
-    def clock_tick(self, dt):
-        self.jelly.update_creature()
-
-# Moved to Jelly class
-    # def on_touch_down(self, touch):
-    #     x, y = touch.x, touch.y
-    #
-    #     handled = super(MyJellyGame, self).on_touch_down(touch)
-    #     if not handled:
-    #         ctrl_pt = ControlPoint()
-    #         ctrl_pt.center = (x,y)
-    #         self.add_widget(ctrl_pt)
-    #         return True
-    #
-    #     else:
-    #         # Should be False
-    #         return handled
-
-
-    # FIXME Read about resume/start builtin
-    def start(self):
-        if self.started:
-            return
-
-        #Clock.schedule_interval(self.clock_tick, 1/60.0)
-        self.started = True
-
-    def pause(self):
-        Clock.unschedule(self.clock_tick)
-
-    def on_done_pressed(self):
-
-        if not self.pressed_once:
-            self.anim_constr.finalize_control_points()
-
-        else:
-            self.anim_constr.finalize_point_destinations()
-
-            self.jelly.animate_bell()
-
-        self.pressed_once = True
-
-
 class MyJellyApp(App):
     def build(self):
         sm = ScreenManager()
