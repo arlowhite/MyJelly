@@ -195,6 +195,9 @@ class AnimationConstructor(Scatter):
 
             step_data = {}
             step_data['vertices'] = verts
+            # FIXME hardcoded 2.4s to open, 0.65 to close
+            # duration to reach this step
+            step_data['duration'] = 2.4 if step=='open_bell' else 0.65
 
             steps[step] = step_data
 

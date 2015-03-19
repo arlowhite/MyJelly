@@ -181,9 +181,11 @@ class MeshAnimator(EventDispatcher):
         a.initial_indices = data['indices']
 
         # u, v coordinates from setup
-        for step in data['steps_order']:
-            verts = steps[step]['vertices']
-            a.add_vertices(verts, duration=0.5, horizontal_transition='in_back', vertical_transition='out_cubic')
+        for step_name in data['steps_order']:
+            step = steps[step_name]
+            verts = step['vertices']
+            duration = step.get('duration', 1.0)
+            a.add_vertices(verts, duration=duration, horizontal_transition='in_back', vertical_transition='out_cubic')
 
         return a
 

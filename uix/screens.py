@@ -51,13 +51,19 @@ class JellyEnvironmentScreen(Screen):
                 self.add_widget(j)
 
         Clock.schedule_interval(self.clock_tick, 1 / 60.0)
-        Clock.schedule_interval(self.change_behavior, 5)
+        Clock.schedule_interval(self.change_behavior, 6)
 
 
     def change_behavior(self, dt):
+        # TODO Move angle changing code to Jelly
         for c in self.children:
-            angle = c.angle + random.randint(-45, 45)
-            Animation(angle=angle, duration=3.0, step=1./30.).start(c)
+            Animation.stop_all(c, 'angle')
+            angle = c.angle + random.randint(-30, 30)
+            # Turning duration should be based on angle amount
+            turn_rate = 15  # degrees per second
+            duration = abs(angle / turn_rate)
+            #print('angle current=%d target=%d duration=%d'%(c.angle, angle, duration))
+            Animation(angle=angle, duration=duration, transition='in_out_cubic').start(c)
 
     def clock_tick(self, dt):
         for c in self.children:
@@ -112,6 +118,7 @@ class JellyAnimationConstructorScreen(Screen):
             store[self.animation_name] = {'image_filepath': store['info']['image_filepath']}
 
         anim_const.set_animation_data(store[self.animation_name], animation_step=self.animation_step)
+        # FIXME Want to remember scale and pos even when opening Jelly fresh?
         try:
             anim_const.animate_changes = False
             anim_const.scale = kwargs['scatter_scale']  # must set scale before pos, otherwise pos changes
@@ -120,10 +127,12 @@ class JellyAnimationConstructorScreen(Screen):
 
             self.ids.move_resize_switch.active = kwargs['move_resize']
             self.ids.animate_toggle.state = kwargs['animate_toggle_state']
-            anim_const.animate_changes = True
 
-        except KeyError:
-            pass
+        except KeyError as e:
+            Logger.debug('%s: missing kwarg %s', self.__class__.__name__, e)
+
+        finally:
+            anim_const.animate_changes = True
 
         self.ids.animation_step_spinner.text_value = self.animation_step
 
