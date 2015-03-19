@@ -22,6 +22,10 @@ class JellySelectButton(Button):
 
         super(JellySelectButton, self).__init__(**kwargs)
 
+    def on_release(self):
+        # TODO long press to edit? Other options, delete, etc. Action Menu of JellyEditor?
+        print(self.last_touch)
+
 
 
 

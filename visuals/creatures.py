@@ -10,7 +10,7 @@ from kivy.vector import Vector
 from kivy.core.image import Image as CoreImage
 from kivy.core.image import ImageLoader
 from kivy.uix.widget import Widget
-from kivy.properties import NumericProperty
+from kivy.properties import NumericProperty, BoundedNumericProperty
 from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.graphics import StencilUse
@@ -20,6 +20,22 @@ from kivy.clock import Clock
 from drawn_visual import ControlPoint
 from animations import MeshAnimator, setup_step
 
+
+def fix_angle(angle):
+    # Convert angle in degrees to the equivalent angle from -180 to 180
+    if angle > 0:
+        angle %= 360
+    else:
+        angle %= -360
+
+    # angle will now be between -360 and 360, now clip to 180
+    if angle > 180:
+        return -360 + angle
+
+    elif angle < -180:
+        return 360 + angle
+
+    return angle
 
 # Don't think I want event dispatch, not needed for every creature and will be too much
 
@@ -33,9 +49,9 @@ class Creature(Widget):
 
     scale = NumericProperty(1.0)
 
-    # angle in degrees
     # 0 points up, positive is counter-clockwise
-    angle = NumericProperty(0.0)
+    # angle in degrees. Converted to -180 to 180
+    angle = BoundedNumericProperty(0.0, min=-180.0, max=180.0, errorhandler=fix_angle)
 
     speed = NumericProperty(0.0)
 

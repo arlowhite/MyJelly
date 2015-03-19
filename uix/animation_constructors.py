@@ -44,6 +44,7 @@ class AnimationConstructor(Scatter):
         self._previous_step = self.animation_step
         self.faded_image_opacity = 0.5
         self._moved_control_point_trigger = Clock.create_trigger(self.on_control_point_moved)
+        self._control_point_opacity_trigger = Clock.create_trigger(self._animate_control_point_opacity)
 
         super(AnimationConstructor, self).__init__(**kwargs)
 
@@ -459,12 +460,17 @@ class AnimationConstructor(Scatter):
             cp.disabled = disable
 
     def on_control_points_opacity(self, _, opacity):
+        self._control_point_opacity_trigger()
+
+    def _animate_control_point_opacity(self, _):
+        # Called through trigger to avoid starting an Animation and then canceling it immediately
         if hasattr(self, '_control_point_opacity_animation'):
             for cp in self.control_points:
                 self._control_point_opacity_animation.cancel(cp)
 
             self._control_point_opacity_animation = None
 
+        opacity = self.control_points_opacity
         if self.animate_changes:
             a = Animation(duration=0.5, opacity=opacity)
             for cp in self.control_points:
