@@ -1,21 +1,4 @@
-#:kivy 1.8.0
-
-<MyJellyGame>:
-
-    Label:
-        font_size: 20
-        # FIXME Not sure why offscreen so much
-        x: self.parent.x + 100
-        top: self.parent.top
-        text: "Click points around the bell"
-
-    Button:
-        top: root.top
-        right: root.right
-        font_size: '24sp'
-        text: "Done"
-        on_press: self.parent.on_done_pressed()
-
+#:kivy 1.9.0
 
 <NewJellyScreen>:
     BoxLayout:
@@ -85,7 +68,7 @@
 
 <JellySelectButton>:
 
-    on_release: app.open_screen('JellyAnimationConstructorScreen', {'jelly_id': root.jelly_id})
+    on_release: app.open_screen('JellyDesignScreen', {'jelly_id': root.jelly_id})
 
     height: cm(6)
     size_hint_y: None
@@ -96,6 +79,36 @@
         pos: root.pos
         size: root.size
         allow_stretch: True
+
+<JellyDesignScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+
+        ActionBar:
+            id: action_bar
+            size_hint_y: None
+
+            ActionView:
+
+                ActionPrevious:
+                    title: 'Jelly Designer'
+                    # FIXME Manage previous button
+                    on_press: app.open_screen('JellySelectionScreen')
+
+        BoxLayout:
+            orientation: 'vertical'
+
+            Button:
+                text: 'Animate Bell'
+                on_press: app.open_screen('JellyAnimationConstructorScreen', {'jelly_id': root.jelly_id, 'animation_name':'bell_animation'})
+
+            Button:
+                text: 'Outline Tentacles'
+                on_press: app.open_screen('JellyAnimationConstructorScreen', {'jelly_id': root.jelly_id, 'animation_name':'tentacles'})
+
+            Button:
+                text: 'Tweaks'
+
 
 
 <JellyAnimationConstructorScreen>:
@@ -141,12 +154,12 @@
                 #disabled: len(animation_constructor.ctrl_points) < 3
                 #loop: True
                 size_hint_y: None
-                size_hint_x: 0.5
+                size_hint_x: 0.8
                 pos_hint: {'center_x': 0.5}
                 #height: cm(1.0)
                 # TODO labels vs values? internationalization?
                 #text: 'Setup'
-                values: ('Setup', 'Open bell', 'Closed bell (optional)')
+                values: ('Setup', 'Open bell', 'Closed bell')
                 text_values: ('__setup__', 'open_bell', 'closed_bell')
                 text_value: '__setup__'
                 on_text_value: screen.animation_step = args[1]

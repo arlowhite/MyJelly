@@ -124,7 +124,11 @@ class MyJellyApp(App):
         if hasattr(current_screen, 'get_state'):
             current_screen.get_state()
 
-        s = screen_class(**screen_args) if screen_args else screen_class()
+        try:
+            s = screen_class(**screen_args) if screen_args else screen_class()
+        except:
+            Logger.exception('Failed to open_screen(%s, %s)'%(screen, screen_args))
+            raise
 
         # TODO left/right decision, sort screens?
         self.screen_manager.switch_to(s)

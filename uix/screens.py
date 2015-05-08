@@ -19,6 +19,16 @@ from uix.animation_constructors import AnimationConstructor
 
 from data.state_storage import load_jelly_storage, load_all_jellies
 
+class AppScreen(Screen):
+
+    def get_state(self):
+        d = {}
+        for attr in self.__class__.state_attributes:
+            d[attr] = getattr(self, attr)
+
+        return d
+
+
 class JellyEnvironmentScreen(Screen):
     """Living area for the Jelly where it moves around.
     Tap anywhere to pause and bring-up menu to take car of Jelly
@@ -93,9 +103,21 @@ class JellySelectionScreen(Screen):
         for jdata in jelly_stores:
             grid.add_widget(JellySelectButton(jdata))
 
-class JellyAnimationConstructorScreen(Screen):
+class JellyDesignScreen(AppScreen):
+    # menu to Bell, Tentacles, etc
+
+    state_attributes = ('jelly_id',)
+
+    def __init__(self, **kwargs):
+        self.jelly_id = kwargs['jelly_id']
+        super(JellyDesignScreen, self).__init__(**kwargs)
+
+
+
+class JellyAnimationConstructorScreen(AppScreen):
     """Modify the Mesh animation for the selected Jelly.
     create a new screen instead of setting jelly_id or animation_name for now"""
+    state_attributes = ('jelly_id', 'animation_step', 'animation_name')
 
     animation_step = StringProperty(setup_step)
 
@@ -104,7 +126,7 @@ class JellyAnimationConstructorScreen(Screen):
             # raise ValueError('Must specify jelly_id')
         self.jelly_id = kwargs['jelly_id']
         # The animation name to store the data under in the store, may be configured in future
-        self.animation_name = kwargs.get('animation_name', 'bell_animation')
+        self.animation_name = kwargs['animation_name']
         self.animation_step = kwargs.get('animation_step', setup_step)
 
         store = load_jelly_storage(self.jelly_id)
@@ -157,14 +179,16 @@ class JellyAnimationConstructorScreen(Screen):
         self.store.store_sync()
 
     def get_state(self):
+        d = super(JellyAnimationConstructorScreen, self).get_state()
+
         # Jelly state is stored separately
         self.on_leave()
 
         ac = self.ids.animation_constructor
-        return dict(jelly_id=self.jelly_id, animation_step=self.animation_step,
-                    scatter_pos=ac.pos, scatter_scale=ac.scale,
-                    move_resize=ac.move_resize,
-                    animate_toggle_state=self.ids.animate_toggle.state)
+        d.update(dict(scatter_pos=ac.pos, scatter_scale=ac.scale,
+                      move_resize=ac.move_resize,
+                      animate_toggle_state=self.ids.animate_toggle.state))
+        return d
 
 
 class NewJellyScreen(Screen):
@@ -210,4 +234,4 @@ class NewJellyScreen(Screen):
         jelly.put('info', id=jelly_id, image_filepath = filepath)
         jelly.store_sync()  # As soon as image is saved, save jelly state
 
-        App.get_running_app().open_screen('JellyAnimationConstructorScreen', dict(jelly_id=jelly_id))
+        App.get_running_app().open_screen('JellyDesignScreen', dict(jelly_id=jelly_id))

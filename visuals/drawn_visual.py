@@ -1,6 +1,6 @@
 from kivy.uix.widget import Widget
 from kivy.graphics import Line, Canvas, Color
-from kivy.properties import NumericProperty
+from kivy.properties import NumericProperty, BooleanProperty
 from kivy.animation import Animation
 from kivy.vector import Vector
 from kivy.metrics import dp
@@ -65,6 +65,8 @@ class ControlPoint(Widget):
     natural_size = NumericProperty(1.0)  # size will be scaled, so this is the default/natural size
     drawn_size = NumericProperty(1.0)
     hole_diam = NumericProperty(1.0)
+
+    hide_trail_line = BooleanProperty(False)
 
     def __init__(self, **kwargs):
         self.mesh = None
@@ -214,7 +216,12 @@ class ControlPoint(Widget):
             if detach_mesh_after:
                 self.attach_mesh(False)
 
-        self.update_trail_line()
+    def on_hide_trail_line(self, _, hide):
+        if hide:
+            self.canvas.before.clear()
+
+        else:
+            self.canvas.before.add(self.trail_line)
 
 
     def update_trail_line(self):
@@ -223,18 +230,15 @@ class ControlPoint(Widget):
         if not hasattr(self, 'trail_line'):
             return
 
-        indices = self.positions.keys()
-        if len(indices) <= 1:
-            return
+        parent = self.parent
 
-        indices.sort()
         points = []
-        for index in indices:
-            if index == setup_step:
-                # TODO hackish way to define line, design better
-                continue
+        for step in parent.step_order:
+            parent.get_horiz_transition(step)
+            parent.get_vert_transition(step)
 
-            points.extend(self.positions[index])
+
+            points.extend(self.positions[step])
 
         self.trail_line.points = points
 
@@ -266,8 +270,10 @@ class ControlPoint(Widget):
         else:
             # May not exist if ControlPoint.pos was never set while on this position
             # However, needs a valid value for animation data serialization callers
+            # Default to setup position
             if pos_index not in self.positions:
-                self.positions[pos_index] = (self.x, self.y)
+                setup_pos = self.positions[setup_step]
+                self.positions[pos_index] = (setup_pos[0], setup_pos[1])
 
             return self.positions[pos_index]
 

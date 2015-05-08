@@ -30,10 +30,11 @@ class AnimationConstructor(Scatter):
     control_points_disabled = BooleanProperty(False)
     control_points_opacity = BoundedNumericProperty(1.0, min=0.0, max=1.0)
     image_opacity = BoundedNumericProperty(1.0, min=0.0, max=1.0)
+    mesh_mode = StringProperty('triangle_fan')
 
     def __init__(self, **kwargs):
         self.autosize = True
-        self.mesh_mode = 'triangle_fan'
+        self.mesh_mode = kwargs.get('mesh_mode', 'triangle_fan')
         self.setup_step = setup_step
         self.mesh_attached = False
         self._image_size_set = False
@@ -57,6 +58,9 @@ class AnimationConstructor(Scatter):
             self.mesh_color = Color(rgba=(1, 1, 1, 1))
             self.mesh = Mesh(mode=self.mesh_mode)
 
+    def on_mesh_mode(self, _, mode):
+        print('mesh_mode', mode)
+        self.mesh.mode = str(mode)
 
     def set_animation_data(self, data, animation_step=setup_step):
         """Resets AnimationConstructor, displays image centered"""
@@ -149,7 +153,6 @@ class AnimationConstructor(Scatter):
                 # cp.move_to_position_index(self.animation_step, animate=False)
                 cp.mesh = mesh  # set after so on_pos doesn't do anything
                 self.add_widget(cp)
-                # cp.update_trail_line()  # cp.on_pos calls this
 
             self.control_points = cps
 
@@ -257,7 +260,7 @@ class AnimationConstructor(Scatter):
     def on_control_points(self, widget, points):
         # If on first animation step, Update mesh to preview Mesh cut
         if self.animation_step == setup_step and len(points) >= 3:
-            self.calc_mesh_vertices(step=setup_step)
+            self._moved_control_point_trigger()
 
             # Fade image a bit
             #if self.image.opacity > self.faded_image_opacity:
@@ -351,8 +354,8 @@ class AnimationConstructor(Scatter):
         cent_x /= num
         cent_y /= num
 
-
-        if triangle_fan_mode and step==setup_step:
+        # step may be None if moving points
+        if triangle_fan_mode and self.animation_step==setup_step:
             # Sort by angle from centroid in case user didn't place around perimeter in order
 
             cent_vec = Vector(cent_x, cent_y)
@@ -401,8 +404,21 @@ class AnimationConstructor(Scatter):
             mesh_verts = self.mesh.vertices
             num_mesh_verts = len(mesh_verts)
 
+            # preserve_uv: Do not overwrite the uv coordinates in the current Mesh.vertices
+            # None: False if self.animation_step == setup_step
+            # specified: False if step == setup_step
+            # Refactored this way earlier, but went back because Animation uses None and when animating
+            # back to setup_step we want preserve_uv false
+            # preserve_uv = True
+            # if step is None and self.animation_step == setup_step:
+            #     preserve_uv = False
+            # elif step == setup_step:
+            #     preserve_uv = False
+
             if preserve_uv and num_mesh_verts > 0:
-                assert num_mesh_verts == len(verts)
+                if num_mesh_verts != len(verts):
+                    raise AssertionError('Number of calculated vertices (%d) != number Mesh.vertices (%d) step=%s'
+                                         %(len(verts), num_mesh_verts, step))
 
                 # Only overwrite x, y mesh coords
                 for x in range(0, num_mesh_verts, 4):
@@ -420,7 +436,9 @@ class AnimationConstructor(Scatter):
 
     def move_control_points(self, position_index, detach_mesh_after):
         "Move all of the Control Points to the specified position index"
+        on_setup = position_index == setup_step
         for cp in self.control_points:
+            cp.hide_trail_line = on_setup
             cp.move_to_position_index(position_index, detach_mesh_after=detach_mesh_after, animate=self.animate_changes)
 
 
