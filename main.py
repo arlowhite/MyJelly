@@ -1,4 +1,5 @@
 __author__ = 'awhite'
+__version__ = '0.1'
 
 import kivy
 kivy.require('1.9.0')

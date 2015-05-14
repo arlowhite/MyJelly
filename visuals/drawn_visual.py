@@ -233,9 +233,13 @@ class ControlPoint(Widget):
         parent = self.parent
 
         points = []
-        for step in parent.step_order:
-            parent.get_horiz_transition(step)
-            parent.get_vert_transition(step)
+        for step in parent.animation_steps_order:
+            if step not in self.positions:
+                continue
+
+            # parent.get_horiz_transition(step)
+            # parent.get_vert_transition(step)
+            # TODO draw trail line to animation transition curves
 
 
             points.extend(self.positions[step])

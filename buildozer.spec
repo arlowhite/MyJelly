@@ -26,15 +26,16 @@ source.exclude_dirs = tests, bin, media_src, .buildozer, .idea, .git
 #source.exclude_patterns = license,images/*/*.jpg
 
 # (str) Application versioning (method 1)
-#version.regex = __version__ = ['"](.*)['"]
-#version.filename = %(source.dir)s/main.py
+version.regex = __version__ = ['"](.*)['"]
+version.filename = %(source.dir)s/main.py
 
 # (str) Application versioning (method 2)
-version = 0.1
+# version = 0.1
 
 # (list) Application requirements
 # comma seperated e.g. requirements = sqlite3,kivy
-requirements = kivy==master
+#requirements = kivy==master
+requirements = kivy
 
 # (list) Garden requirements
 #garden_requirements =
@@ -66,19 +67,19 @@ android.api = 14
 android.minapi = 8
 
 # (int) Android SDK version to use
-android.sdk = 21
+android.sdk = 22
 
 # (str) Android NDK version to use
-#android.ndk = 9c
+android.ndk = 10d
 
 # (bool) Use --private data storage (True) or --dir public storage (False)
 #android.private_storage = True
 
 # (str) Android NDK directory (if empty, it will be automatically downloaded.)
-# android.ndk_path =
+android.ndk_path = /home/awhite/Apps/android-ndk-r10d
 
 # (str) Android SDK directory (if empty, it will be automatically downloaded.)
-# android.sdk_path =
+android.sdk_path = /home/awhite/Apps/android-sdk-linux
 
 # (str) python-for-android git clone directory (if empty, it will be automatically cloned from github)
 android.p4a_dir =/home/awhite/Code/python/kivy/python-for-android
@@ -105,7 +106,7 @@ android.p4a_dir =/home/awhite/Code/python/kivy/python-for-android
 
 # (str) OUYA Console category. Should be one of GAME or APP
 # If you leave this blank, OUYA support will not be enabled
-# android.ouya.category = GAME
+android.ouya.category = GAME
 
 # (str) Filename of OUYA Console icon. It must be a 732x412 png image.
 #android.ouya.icon.filename = %(source.dir)s/data/ouya_icon.png

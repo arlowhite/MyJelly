@@ -2,3 +2,4 @@
 /.buildozer
 /.idea
 /bin
+/*.log
