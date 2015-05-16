@@ -12,6 +12,8 @@ from kivy.logger import Logger
 from kivy.properties import StringProperty
 from kivy.animation import Animation
 
+import cymunk as phy
+
 from visuals.animations import setup_step
 from visuals.creatures import Jelly
 from uix.elements import JellySelectButton
@@ -39,6 +41,9 @@ class JellyEnvironmentScreen(Screen):
     def __init__(self, **kwargs):
         super(JellyEnvironmentScreen, self).__init__(**kwargs)
 
+        # TODO different update intervals for physics/animations?
+        self.update_interval = 1/60.0
+
     def on_size(self, _, size):
         if size == [1, 1]:
             return
@@ -50,37 +55,55 @@ class JellyEnvironmentScreen(Screen):
         "called after size set once"
         Logger.debug('%s: initialize()', self.__class__.__name__)
 
+        # Setup physics space
+        # TODO need to respond to resizes?
+        # http://niko.in.ua/blog/using-physics-with-kivy/
+        # kw - is some key-word arguments for configuting Space
+        self.phy_space = space = phy.Space()
+
         for store in load_all_jellies():
-            for x in range(3):
+            for x in range(2):
                 Logger.debug('Creating Jelly %s', store['info']['id'])
                 j = Jelly(jelly_store=store)
-                j.speed = random.uniform(0, 10.0)
-                j.scale = random.uniform(0.25, 2.0)
-                j.angle = random.randint(-180, 180)
-                j.pos = (random.randint(10, self.width), random.randint(10, self.height))
+                #j.speed = random.uniform(0, 10.0)
+                j.scale = random.uniform(0.75, 2.0)
+                # j.scale = 0.5
+                # j.change_angle(random.randint(-180, 180))
+                j.change_angle(0.0)
+                # j.move(self.width/2., self.height/2.)
+                j.move(random.randint(10, self.width), random.randint(10, self.height))
+                print("Jelly pos=%s, angle=%s"%(j.pos, j.angle))
                 self.add_widget(j)
+                j.bind_physics_space(space)
 
-        Clock.schedule_interval(self.clock_tick, 1 / 60.0)
-        Clock.schedule_interval(self.change_behavior, 6)
+            # break # FIXME remove
+
+        Clock.schedule_interval(self.update_simulation, self.update_interval)
+        Clock.schedule_interval(self.change_behavior, 20)
+        self.change_behavior(0.0)
 
 
     def change_behavior(self, dt):
         # TODO Move angle changing code to Jelly
         for c in self.children:
-            Animation.stop_all(c, 'angle')
-            angle = c.angle + random.randint(-30, 30)
-            # Turning duration should be based on angle amount
-            turn_rate = 15  # degrees per second
-            duration = abs(angle / turn_rate)
-            #print('angle current=%d target=%d duration=%d'%(c.angle, angle, duration))
-            Animation(angle=angle, duration=duration, transition='in_out_cubic').start(c)
+            angle = c.angle + random.randint(-70, 70)
+            # print('current angle=%d  orienting %d deg'%(c.angle, angle))
+            c.orient(angle)
 
-    def clock_tick(self, dt):
+
+    def update_simulation(self, dt):
+        # Could pass dt, but docs state:
+        # Update the space for the given time step. Using a fixed time step is
+        # highly recommended. Doing so will increase the efficiency of the contact
+        # persistence, requiring an order of magnitude fewer iterations to resolve
+        # the collisions in the usual case.
+        self.phy_space.step(self.update_interval)
+
         for c in self.children:
             c.update(dt)
 
     def pause(self):
-        Clock.unschedule(self.clock_tick)
+        Clock.unschedule(self.update_simulation)
 
     # TODO UI for leaving Environment screen
     def on_touch_down(self, touch):

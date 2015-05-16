@@ -35,6 +35,7 @@ class MeshAnimator(EventDispatcher):
     mesh = ObjectProperty(None)
 
     def __init__(self, **kwargs):
+        self.step_names = []
         self.vertices_states = []
         self.previous_step = 0
         self._animation = None
@@ -44,7 +45,7 @@ class MeshAnimator(EventDispatcher):
         super(MeshAnimator, self).__init__(**kwargs)
 
 
-    def add_vertices(self, vertices, duration=1.0, delay=None,
+    def add_vertices(self, step_name, vertices, duration=1.0, delay=None,
                      horizontal_transition='linear', vertical_transition='linear', uv_change=False):
         """Add a set of vertices.
         duration: Seconds taken to reach vertices at this step.
@@ -58,6 +59,7 @@ class MeshAnimator(EventDispatcher):
         if num > 0 and len(self.vertices_states[0].vertices) != len(vertices):
             raise ValueError('Mismatched number of vertices: %d vs %d'%(num, len(vertices)))
 
+        self.step_names.append(step_name)
         self.vertices_states.append(VerticesState(vertices, duration, delay, horizontal_transition, vertical_transition) )
 
 
@@ -104,7 +106,7 @@ class MeshAnimator(EventDispatcher):
         # Go from 0 to 1 each time, try saving Animation
         # PERF try keeping Animation instance, need to change transition/duration each time
         a = Animation(horizontal_fraction=1.0, transition=state.horizontal_transition, duration=dur)
-        a &= Animation(vertical_fraction=1.0, transition=state.vertical_transition, duration=dur)
+        a &= Animation(vertical_fraction=1.0, transition=state.vertical_transition, duration=dur, step=1/30.0)
         a.bind(on_complete=self.on_animation_complete)
         self._animation = a
         a.start(self)
@@ -185,7 +187,7 @@ class MeshAnimator(EventDispatcher):
             step = steps[step_name]
             verts = step['vertices']
             duration = step.get('duration', 1.0)
-            a.add_vertices(verts, duration=duration, horizontal_transition='in_back', vertical_transition='out_cubic')
+            a.add_vertices(step_name, verts, duration=duration, horizontal_transition='in_back', vertical_transition='out_cubic')
 
         return a
 

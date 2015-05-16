@@ -1,11 +1,11 @@
 __author__ = 'awhite'
 
 import random
-from math import cos, sin, radians
+from math import cos, sin, radians, degrees, pi
 
 from kivy.logger import Logger
 from kivy.graphics import Rectangle, Triangle, Color, Rotate, Translate, InstructionGroup, PushMatrix, PopMatrix, \
-    PushState, PopState, Canvas, Mesh, Scale
+    PushState, PopState, Canvas, Mesh, Scale, Ellipse, Line
 from kivy.vector import Vector
 from kivy.core.image import Image as CoreImage
 from kivy.core.image import ImageLoader
@@ -16,6 +16,9 @@ from kivy.clock import Clock
 from kivy.graphics import StencilUse
 from kivy.graphics.instructions import InstructionGroup
 from kivy.clock import Clock
+
+import cymunk as phy
+from cymunk import Vec2d
 
 from drawn_visual import ControlPoint
 from animations import MeshAnimator, setup_step
@@ -45,27 +48,45 @@ def fix_angle(angle):
 # TODO Probably just do EventDispatcher instead of Widget? Performance test # of Jellies limit
 # Single animation update loop instead of Animation Clocks for each? or chain Animations? &=
 class Creature(Widget):
-    "Something that moves every clock tick"
+    """Visual entity that moves around (update called on game tick)
+     and is attached to the Cymunk physics system"""
 
     scale = NumericProperty(1.0)
 
-    # 0 points up, positive is counter-clockwise
+    # 0 points right, positive is counter-clockwise
     # angle in degrees. Converted to -180 to 180
     angle = BoundedNumericProperty(0.0, min=-180.0, max=180.0, errorhandler=fix_angle)
 
     speed = NumericProperty(0.0)
 
     def __init__(self, **kwargs):
-        self.angle_radians = 0
+
+        self.debug_visuals = True
+        # units?? Make KivyProperty? defaults?
+        self.orienting = False  # is currently orienting toward orienting_angle
+        self.orienting_angle = 0
+        self.orienting_throttle = 1.0
+
+        # TODO think about scaling mass volume cubic?
+        mass = 1e5  # mass of the body i.e. linear moving inertia
+        moment = 1e5  # moment of inertia, i.e. rotation inertia
+        mass = 100
+        self.phy_body = body = phy.Body(mass, moment)
+        self.phy_body.velocity_limit = 1000
+
+        #box = phy.Poly.create_box(body, size=(200, 100))
+        radius = 100
+        self.phy_shape = phy.Circle(body, radius)
+        #body.position = 400, 100  # set some position of body in simulated space coordinates
+
         super(Creature, self).__init__(**kwargs)
 
-        # self.pos = Vector(100, 100)
-
-        # FIXME Does velocity vector belong here?
-        self.vel = Vector(0, 0)
-        self.vel_y = 1
-
         self.draw()
+
+    def bind_physics_space(self, space):
+        '''Attach to the given physics space'''
+        space.add(self.phy_body, self.phy_shape)  # add physical objects to simulated space
+        #self.phy_body.activate()
 
     def draw(self):
         with self.canvas.before:
@@ -76,19 +97,50 @@ class Creature(Widget):
             PopMatrix()
             PopState()
 
+
         with self.canvas:
             self._color = Color(1, 1, 1, 1)
 
             # Control size without recalculating vertices
             self._scale = Scale(1, 1, 1)
 
+            # Translate graphics to Creature's position
             self._trans = Translate()
             self._trans.xy = self.pos
 
+            if self.debug_visuals:
+                # Need to undo rotation when drawing orienting line
+                PushMatrix()
+
             self._rot = Rotate()
-            self._rot.angle = self.angle
+            self._rot.angle = self.angle - 90
 
             self.draw_creature()
+
+            if self.debug_visuals:
+                # Triangle at pos oriented toward angle (within Rotate transform)
+                Color(rgba=(1, 0, 0, 0.6))
+                x = 6
+                Triangle(points=(-x, -x, x, -x, 0, x))
+
+                PopMatrix()
+
+                # Orienting Line
+                Color(rgba=(0.0, 1.0, 0.0, 0.8))
+                self._orienting_line = Line(width=1.2)
+
+
+
+    def move(self, x, y):
+        """Set position in physics and visual systems"""
+        self.phy_body.position = x, y
+        self.pos = x, y
+
+    def change_angle(self, angle):
+        """Set angle (degrees) in physics and visual systems"""
+        self.phy_body.angle = radians(angle)
+        self.angle = angle
+
 
     def on_pos(self, jelly_obj, coords):
         self._trans.xy = coords
@@ -98,55 +150,73 @@ class Creature(Widget):
         self._scale.xyz = (scale, scale, 1.0)
 
     def on_angle(self, _, angle):
-        self.angle_radians = radians(angle)
-        self._rot.angle = angle
+        self._rot.angle = angle - 90  # rotate 90 deg clockwise to correct direction
         # FIXME angle%360? or -180 to 180  see what Scale does
-        self.canvas.ask_update()  # TODO update necessary?
+        # TODO update physics
+
+        #self.canvas.ask_update()  # TODO update necessary?
+
+
+    def orient(self, angle, throttle=1.0):
+        """Orient the Creature toward the angle, using body motion
+        throttle 0.0 to 1.0 for how quickly to rotate
+        """
+        self.orienting = True
+        self.orienting_angle = angle = fix_angle(angle)
+        self.orienting_throttle = throttle
+        self._half_orienting_angle_original_diff_abs = abs(angle-self.angle) / 2.0
+
+        if self.debug_visuals:
+            vec = Vec2d(50, 0).rotated_degrees(angle)
+            self._orienting_line.points = (0, 0, vec.x, vec.y)
 
     def update(self, dt):
-        # Want to avoid creating many Vector objects?
-        # Vector operations creating new: rotate(), *
-        # Modify self: *=
+        """Called after physics space has done a step update"""
 
-        # Possibilities
-        # pos_vec += velocity_vec * dt  (velocity_vec angle
+        body = self.phy_body
+        # TODO drag, continuous force? how to update instead of adding new, just reset? look at arrows example
 
-        # Rotate vector by angle each time
-        # No Vector() creation
-        # velocity_vec[0] = 0
-        # velocity_vec[1] = speed*dt
-        # TODO Vector rotates same way?
-        # pos_vec += velocity_vec.rotate(angle, self=True)  # would need to modify rotate
+        drag_const = 0.000000001  # drag coeficcent * density of fluid
+        # TODO cos/sine of angle?
+        drag_force = body.velocity.rotated_degrees(180) * (body.velocity.get_length_sqrd() * self.cross_area * drag_const)
+        self.phy_body.apply_impulse(drag_force)
 
-        # Vectors involve object creation and function calls. Just do the math myself
+        # Update visual position and rotation with information from physics Body
+        body = self.phy_body
+        x = body.position.x
+        y = body.position.y
 
-        move = self.speed * dt  # How many pixels to move along velocity vector
-        #  +counter-clockwise (axis vertical)
+        # +counter-clockwise (axis vertical)
+        self.angle = degrees(body.angle)  # adjust orientation of the widget
 
-        x = self.x - sin(self.angle_radians)
-        y = self.y + cos(self.angle_radians)
 
+        # TODO Does physics system have way of bounding?
         parent = self.parent
+        out_of_bounds = False
         if y > parent.height:
             y = 1
+            out_of_bounds = True
 
         if y < 0:
             y = parent.height - 1
+            out_of_bounds = True
 
         if x > parent.width:
             x = 1
+            out_of_bounds = True
 
         if x < 0:
             x = parent.width - 1
+            out_of_bounds = True
 
-        self.pos = (x, y)
+        if out_of_bounds:
+            self.move(x, y)
+        else:
+            self.pos = (x, y)
 
         # Needed at all?
         # update_creature()
 
-        # self.canvas.ask_update()
-
-        #self.shape.pos = self.pos
 
 
     def set_behavior(self, b):
@@ -160,6 +230,11 @@ class Jelly(Creature):
     def __init__(self, **kwargs):
 
         self._bell_animator = None
+        self._prev_bell_vertical_fraction = 0.0
+        self.bell_push_dir = True  # whether Bell is pulsing as to push jelly
+        # indices of the Bell Mesh that can be the farthest horizontally to the right
+        # (used to determine the bell_diameter dynamically)
+        self._rightmost_vertices_for_step = {}
 
         # Ideally Animation would be more abstract
         # However, this game focuses only on Jellies
@@ -168,9 +243,13 @@ class Jelly(Creature):
 
         super(Jelly, self).__init__(**kwargs)
 
+        # TODO friction? self.phy_shape.friction = 0.5
+
     def draw_creature(self):
         # called with canvas
         store = self.store
+
+        # Draw Jelly Bell
         anim = store['bell_animation']
         mesh_mode = str(anim['mesh_mode'])
         if mesh_mode != 'triangle_fan':
@@ -184,28 +263,165 @@ class Jelly(Creature):
         PushMatrix()
 
         adjustment = (-verts[0], -verts[1])
+        self.centering_trans_x, self.centering_trans_y = adjustment
         Logger.debug('Jelly: centering adjustment %s', adjustment)
         # Translate(xy=adjustment)
         t = Translate()
         t.xy = adjustment
 
         img = CoreImage(anim['image_filepath'])
-        mesh = Mesh(mode=mesh_mode, texture=img.texture)
+        self.bell_mesh = mesh = Mesh(mode=mesh_mode, texture=img.texture)
         a = MeshAnimator.from_animation_data(anim)
-        a.mesh = mesh
-        a.start_animation()
         self._bell_animator = a
+        a.mesh = mesh
+        a.bind(vertical_fraction=self.on_bell_vertical_fraction, step=self.on_bell_animstep)
+        a.start_animation()
 
         PopMatrix()
 
-        # Visualize pos point
-        Color(rgba=(1, 0, 0, 0.6))
-        x = 6
-        Triangle(points=(-x, -x, x, -x, 0, x))
+
+        # Visualize physics shape
+        # size will be set to radius in calc_bell_radius()
+        if self.debug_visuals:
+            Color(rgba=(0.1, 0.4, 0.5, 0.9))
+            self._phys_shape_ellipse = Line(ellipse=(-5, -5, 10, 10))
+                # Ellipse(pos=(-5, -5), size=(10, 10))
+
+        # Update Physics shape
+        self.calc_bell_radius()
+
+
+
+    def calc_bell_radius(self):
+        """Get the current bell radius
+        Updates bell physics shape, self.cross_area, self.bell_radius
+        """
+
+        # Coordinates are in Texture image x, y coords
+        x_adjustment = self.centering_trans_x  # number is negative (add to adjust)
+        verts = self.bell_mesh.vertices
+        rightmost_dist = 0
+        for vertex_index in range(0, len(verts), 4):
+            x = verts[vertex_index] + x_adjustment
+            if x > rightmost_dist:
+                rightmost_dist = x
+
+        self.bell_radius = rightmost_dist
+        scaled_bell_radius = rightmost_dist * self.scale
+        self.phy_shape.radius = scaled_bell_radius
+        # In some languages multiplying by self is faster than pow
+
+        # Maybe calc moment manually instead of using function?
+        # r_sqd = rightmost_dist*rightmost_dist
+        # self.phy_body.moment = (pi / 2.0) * r_sqd * r_sqd
+        self.phy_body.moment = phy.moment_for_circle(self.phy_body.mass, 0, scaled_bell_radius)
+        self.cross_area = pi * scaled_bell_radius * scaled_bell_radius
+
+        # Will be affected by Scale, so don't use scaled_bell_radius
+        if self.debug_visuals:
+            self._phys_shape_ellipse.ellipse = (-rightmost_dist, -rightmost_dist,
+                                                rightmost_dist * 2.0, rightmost_dist * 2.0)
+            # self._phys_shape_ellipse.pos = (-rightmost_dist, -rightmost_dist)
+            # self._phys_shape_ellipse.size = (rightmost_dist * 2.0, rightmost_dist * 2.0)
+
+        return rightmost_dist
+
+    # TODO change pulse speed according to throttle
+    #def orient
+
+
+    def on_bell_animstep(self, meshanim, step):
+        self._prev_bell_vertical_fraction = 0.0
+        # Moving toward closed_bell is pushing
+        self.bell_push_dir = self._bell_animator.step_names[step] == 'closed_bell'
+
+
+    def on_bell_vertical_fraction(self, meshanim, frac):
+        """Called every time bell animation's vertical fraction changes
+        1.0 is up and open all the way
+        0.0 is down and closed all the way
+        """
+
+        body = self.phy_body
+        rot_vector = body.rotation_vector
+
+        # Difference in the vertical_fraction from last call
+        # Always positive since fraction always moves from 0.0 to 1.0
+        v_diff = frac - self._prev_bell_vertical_fraction
+
+        radius = self.calc_bell_radius()
+        self.phy_shape.radius = radius  # TODO cost of updating shape every step too high?
+
+
+        # Lots of little impulses? Or use forces?
+        # impulse i think, since could rotate and would need to reset_forces and calc new each time anyway
+
+        # TODO forces when going backwords? yes? adjust by fraction
+        # hz_fraction = self._bell_animator.horizontal_fraction
+
+        #self.phy_body.activate()
+        # power = (5000 if self.bell_push_dir else -500) * v_diff
+        # impulse = Vec2d(0, 1) * power
+        push_factor = 0.1
+        power = self.cross_area * v_diff * (push_factor if self.bell_push_dir else -push_factor)
+
+
+        # Apply impulse off-center to rotate
+        # Positive rotates clockwise
+        offset_dist = 0
+        if self.orienting:
+            angle_diff = self.orienting_angle - self.angle
+            # TODO use orienting_throttle
+            offset_dist = radius * 0.2
+            if angle_diff > 0:
+                offset_dist *= -1
+
+            # Need to kill angular velocity before reaching the angle
+            # One way is to measure the time it takes to reach halfway, and then reverse thrust....
+            # However this is brittle if the Jelly already has angular velocity from another source
+            # Instead, want to calculate when to reverse offset_dist based on how much torque it can apply
+            # But this is even more difficult because the impulse is not constant, so back to time based...
+
+            # TODO ...and angular velocity is towards orienting_angle?
+            abs_angle_diff = abs(angle_diff)
+            # FIXME if for some reason, does not have enough angular velocity, this would cause
+            # an oscillation around an angle without ever reaching target orienting angle
+            # if abs_angle_diff <= self._half_orienting_angle_original_diff_abs:
+                # Start reducing angular velocity
+                # print('reducing angular velocity %f'%body.angular_velocity)
+                # offset_dist *= -1
+
+            # TODO end orieting
+            # if abs_angle_diff < 1.0 and body.angular_velocity < x:
+                #self.orienting = False
+
+
+        if offset_dist:
+            # if offset is static, it keeps oscillating
+            # https://chipmunk-physics.net/forum/viewtopic.php?f=1&t=59
+            # The offset is in world space coordinates, but is relative to the center of gravity of the body. This means that an r of (0,2) will always be 2 units above the center of gravity in world space coordinates. The offset does not rotate with the body.
+            # offset = self.phy_body.local_to_world(Vec2d(50, 0))
+
+            self.phy_body.apply_impulse(rot_vector * power, rot_vector.perpendicular() * offset_dist)
+
+        else:
+            self.phy_body.apply_impulse(rot_vector * power)
+
+        # self.phy_body.apply_impulse(self.phy_body.rotation_vector * power, (offset['x'], offset['y']))
+
+        # self.phy_body.apply_impulse(impulse.rotated(self.phy_body.angle))
+
+        #print("Velocity %s  positions %s" %(self.phy_body.velocity, self.phy_body.position))
+
+        self._prev_bell_vertical_fraction = frac
+
 
     # TODO thing about what is controled in MeshAnimation vs Creature
     def bell_pulse_complete(self, anim_seq, widget):
+        # Schedule next pulse
         Clock.schedule_once(self.animate_bell, random.triangular(0.3, 2.0, 0.5))
+        raise AssertionError('not used?')
+
 
     # def update_creature(self):
     #     pass
