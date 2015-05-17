@@ -74,19 +74,30 @@ class Creature(Widget):
         self.phy_body = body = phy.Body(mass, moment)
         self.phy_body.velocity_limit = 1000
 
+        self.body_parts = []
+
         #box = phy.Poly.create_box(body, size=(200, 100))
         radius = 100
-        self.phy_shape = phy.Circle(body, radius)
+        self.phy_shape = phy.Circle(body, radius, (0, 0))
+        self.phy_shape.friction = 0.4
+        self.phy_shape.elasticity = 0.3
         #body.position = 400, 100  # set some position of body in simulated space coordinates
 
         super(Creature, self).__init__(**kwargs)
+        body.position = self.pos
 
         self.draw()
+
+        # .draw() needs to create ._trans before on_pos, so late bind
+        self.bind(pos=self.on_pos_changed)
 
     def bind_physics_space(self, space):
         '''Attach to the given physics space'''
         space.add(self.phy_body, self.phy_shape)  # add physical objects to simulated space
         #self.phy_body.activate()
+
+        for bp in self.body_parts:
+            bp.bind_physics_space(space)
 
     def draw(self):
         with self.canvas.before:
@@ -133,8 +144,14 @@ class Creature(Widget):
 
     def move(self, x, y):
         """Set position in physics and visual systems"""
+        old_pos = Vec2d(self.phy_body.position)
         self.phy_body.position = x, y
         self.pos = x, y
+
+        # Move body parts as well
+        # TODO actually move body part visual as well instead of relying on update() to do it
+        for bp in self.body_parts:
+            bp.phy_body.position = self.phy_body.position + (bp.phy_body.position - old_pos)
 
     def change_angle(self, angle):
         """Set angle (degrees) in physics and visual systems"""
@@ -142,7 +159,7 @@ class Creature(Widget):
         self.angle = angle
 
 
-    def on_pos(self, jelly_obj, coords):
+    def on_pos_changed(self, jelly_obj, coords):
         self._trans.xy = coords
 
     def on_scale(self, _, scale):
@@ -189,6 +206,9 @@ class Creature(Widget):
         # +counter-clockwise (axis vertical)
         self.angle = degrees(body.angle)  # adjust orientation of the widget
 
+        for bp in self.body_parts:
+            bp.update()
+
 
         # TODO Does physics system have way of bounding?
         parent = self.parent
@@ -224,6 +244,82 @@ class Creature(Widget):
         # TODO think about this API
         b.attach(self)
 
+# TODO PhysicsVisual baseclass?
+class TentacleBodyPart():
+
+    def __init__(self, jelly):
+        mass = 20
+        moment = 40
+        self.phy_body = body = phy.Body(mass, moment)
+
+        # self.phy_body.velocity_limit = 1000
+
+        # self.radius = radius = 20
+        # self.phy_shape = phy.Circle(body, radius, (0, 0))
+        # phy.R
+        self.half_width = width = 100
+        self.half_height = height = 50
+
+        points = [(-width, -height), (-width, height), (width, height), (width, -height)]
+        moment = phy.moment_for_poly(mass, points, (0,0))
+        self.phy_body = body = phy.Body(mass, moment)
+        self.phy_shape = shape = phy.Poly(body, points, (0, 0))
+        shape.friction = 0.4
+        shape.elasticity = 0.3
+
+        pos = Vec2d(jelly.pos) + jelly.phy_body.rotation_vector.rotated_degrees(180) * (2*width + jelly.phy_shape.radius/2.0)
+        body.position = pos
+
+        # phy.PivotJoint(jelly.phy_body, body, jelly.phy_body.position)
+
+        # Set rest_length to current distance between attachments
+        rest_length = body.position.get_distance(jelly.phy_body.position) - width
+        stiffness = 100
+        damping = 50
+        # self.spring = phy.DampedSpring(jelly.phy_body, body, (0, 0), (width, 0), rest_length, stiffness, damping)
+        self.spring1 = phy.DampedSpring(jelly.phy_body, body, (0, height), (width, height), rest_length, stiffness,
+                                       damping)
+
+        self.spring2 = phy.DampedSpring(jelly.phy_body, body, (0, -height), (width, -height), rest_length, stiffness,
+                                       damping)
+
+
+        # rotation acts on angle; might be useful if parts are offset
+
+
+        # self.rot_spring = phy.DampedRotarySpring(jelly.phy_body, body, 0, stiffness*10, damping)
+        # jelly.phy_space.add(spring)
+        # max_bias, max_force?
+
+        # canvas = Canvas(opacity=1.0)
+        with jelly.canvas.after:
+            Color(rgba=(0, 0, 1.0, 0.8))
+
+            print('tent pos', pos)
+            # self.ellipse = Ellipse(pos=(pos.x-radius, pos.y-radius), size=(radius*2, radius*2))
+            PushMatrix()
+            self._trans = Translate()
+            self._rot = Rotate()
+            self.rect = Rectangle(pos=(-width, -height), size=(width * 2, height * 2))
+            PopMatrix()
+
+
+
+    def update(self):
+        body = self.phy_body
+        # self.rect.pos = (body.position.x-self.half_width, body.position.y-self.half_height)
+        self._trans.xy = (body.position.x, body.position.y)
+
+        # +counter-clockwise (axis vertical)
+        self._rot.angle = degrees(body.angle)
+        # self.angle = degrees(body.angle)  # adjust orientation of the widget
+
+    def bind_physics_space(self, space):
+        space.add(self.phy_body, self.phy_shape)
+        space.add(self.spring1)
+        space.add(self.spring2)
+        # space.add(self.rot_spring)
+
 
 class Jelly(Creature):
 
@@ -243,7 +339,8 @@ class Jelly(Creature):
 
         super(Jelly, self).__init__(**kwargs)
 
-        # TODO friction? self.phy_shape.friction = 0.5
+        self.body_parts.append(TentacleBodyPart(self))
+
 
     def draw_creature(self):
         # called with canvas
@@ -291,7 +388,6 @@ class Jelly(Creature):
         self.calc_bell_radius()
 
 
-
     def calc_bell_radius(self):
         """Get the current bell radius
         Updates bell physics shape, self.cross_area, self.bell_radius
@@ -308,7 +404,8 @@ class Jelly(Creature):
 
         self.bell_radius = rightmost_dist
         scaled_bell_radius = rightmost_dist * self.scale
-        self.phy_shape.radius = scaled_bell_radius
+        # Updating shape is not really allowed! Need to create a new shape each time
+        # self.phy_shape.radius = scaled_bell_radius
         # In some languages multiplying by self is faster than pow
 
         # Maybe calc moment manually instead of using function?
@@ -319,8 +416,9 @@ class Jelly(Creature):
 
         # Will be affected by Scale, so don't use scaled_bell_radius
         if self.debug_visuals:
-            self._phys_shape_ellipse.ellipse = (-rightmost_dist, -rightmost_dist,
-                                                rightmost_dist * 2.0, rightmost_dist * 2.0)
+            shape_radius = self.phy_shape.radius
+            self._phys_shape_ellipse.ellipse = (-shape_radius, -shape_radius,
+                                                shape_radius * 2.0, shape_radius * 2.0)
             # self._phys_shape_ellipse.pos = (-rightmost_dist, -rightmost_dist)
             # self._phys_shape_ellipse.size = (rightmost_dist * 2.0, rightmost_dist * 2.0)
 
@@ -350,8 +448,6 @@ class Jelly(Creature):
         v_diff = frac - self._prev_bell_vertical_fraction
 
         radius = self.calc_bell_radius()
-        self.phy_shape.radius = radius  # TODO cost of updating shape every step too high?
-
 
         # Lots of little impulses? Or use forces?
         # impulse i think, since could rotate and would need to reset_forces and calc new each time anyway

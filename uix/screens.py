@@ -61,22 +61,33 @@ class JellyEnvironmentScreen(Screen):
         # kw - is some key-word arguments for configuting Space
         self.phy_space = space = phy.Space()
 
+        # wall = phy.Segment(phy.Body(), (0, 1), (3000, 1), 0.0)
+        # wall.friction = 0.8
+        # space.add(wall)
+        #
+        # wall = phy.Segment(phy.Body(), (1, 3000), (1, 3000), 0.0)
+        # wall.friction = 0.8
+        # space.add(wall)
+
+
         for store in load_all_jellies():
-            for x in range(2):
+            for x in range(1):
                 Logger.debug('Creating Jelly %s', store['info']['id'])
-                j = Jelly(jelly_store=store)
+                # pos = random.randint(110, self.width-110), random.randint(110, self.height-110)
+                pos = self.width/2.0, self.height/2.0
+                j = Jelly(jelly_store=store, pos=pos)
                 #j.speed = random.uniform(0, 10.0)
-                j.scale = random.uniform(0.75, 2.0)
+                # j.scale = random.uniform(0.75, 2.0)
                 # j.scale = 0.5
                 # j.change_angle(random.randint(-180, 180))
-                j.change_angle(0.0)
+                # j.change_angle(0.0)
                 # j.move(self.width/2., self.height/2.)
-                j.move(random.randint(10, self.width), random.randint(10, self.height))
+                # j.move(random.randint(110, self.width), random.randint(110, self.height))
                 print("Jelly pos=%s, angle=%s"%(j.pos, j.angle))
                 self.add_widget(j)
                 j.bind_physics_space(space)
 
-            # break # FIXME remove
+            break # FIXME remove
 
         Clock.schedule_interval(self.update_simulation, self.update_interval)
         Clock.schedule_interval(self.change_behavior, 20)
@@ -87,8 +98,9 @@ class JellyEnvironmentScreen(Screen):
         # TODO Move angle changing code to Jelly
         for c in self.children:
             angle = c.angle + random.randint(-70, 70)
-            # print('current angle=%d  orienting %d deg'%(c.angle, angle))
+            print('current angle=%d  orienting %d deg'%(c.angle, angle))
             c.orient(angle)
+
 
 
     def update_simulation(self, dt):
