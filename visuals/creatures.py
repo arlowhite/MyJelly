@@ -150,8 +150,9 @@ class Creature(Widget):
 
         # Move body parts as well
         # TODO actually move body part visual as well instead of relying on update() to do it
+        move_diff_vec = self.phy_body.position - old_pos
         for bp in self.body_parts:
-            bp.phy_body.position = self.phy_body.position + (bp.phy_body.position - old_pos)
+            bp.translate(move_diff_vec)
 
     def change_angle(self, angle):
         """Set angle (degrees) in physics and visual systems"""
@@ -167,6 +168,7 @@ class Creature(Widget):
         self._scale.xyz = (scale, scale, 1.0)
 
     def on_angle(self, _, angle):
+        # I think this is due to Jelly being drawn vertically, but need to think about how to code this correction best
         self._rot.angle = angle - 90  # rotate 90 deg clockwise to correct direction
         # FIXME angle%360? or -180 to 180  see what Scale does
         # TODO update physics
@@ -193,7 +195,7 @@ class Creature(Widget):
         body = self.phy_body
         # TODO drag, continuous force? how to update instead of adding new, just reset? look at arrows example
 
-        drag_const = 0.000000001  # drag coeficcent * density of fluid
+        drag_const = 0.0000000001  # drag coeficcent * density of fluid
         # TODO cos/sine of angle?
         drag_force = body.velocity.rotated_degrees(180) * (body.velocity.get_length_sqrd() * self.cross_area * drag_const)
         self.phy_body.apply_impulse(drag_force)
@@ -248,77 +250,169 @@ class Creature(Widget):
 class TentacleBodyPart():
 
     def __init__(self, jelly):
-        mass = 20
-        moment = 40
-        self.phy_body = body = phy.Body(mass, moment)
 
-        # self.phy_body.velocity_limit = 1000
+        self.jelly = jelly
 
-        # self.radius = radius = 20
-        # self.phy_shape = phy.Circle(body, radius, (0, 0))
-        # phy.R
-        self.half_width = width = 100
-        self.half_height = height = 50
 
-        points = [(-width, -height), (-width, height), (width, height), (width, -height)]
-        moment = phy.moment_for_poly(mass, points, (0,0))
-        self.phy_body = body = phy.Body(mass, moment)
-        self.phy_shape = shape = phy.Poly(body, points, (0, 0))
-        shape.friction = 0.4
-        shape.elasticity = 0.3
+        # 3 lines of circles
+        # center line a bit stiffer and more massive
 
-        pos = Vec2d(jelly.pos) + jelly.phy_body.rotation_vector.rotated_degrees(180) * (2*width + jelly.phy_shape.radius/2.0)
-        body.position = pos
 
-        # phy.PivotJoint(jelly.phy_body, body, jelly.phy_body.position)
 
-        # Set rest_length to current distance between attachments
-        rest_length = body.position.get_distance(jelly.phy_body.position) - width
+        backwards_vec = jelly.phy_body.rotation_vector.rotated_degrees(180)
+        jelly_pos = Vec2d(jelly.pos)
+        # +  * (2 * width + jelly.phy_shape.radius / 2.0)
+
+
+        canvas_after = jelly.canvas.after
+        canvas_after.add(Color(rgba=(0, 0, 1.0, 0.8)))
+
         stiffness = 100
         damping = 50
-        # self.spring = phy.DampedSpring(jelly.phy_body, body, (0, 0), (width, 0), rest_length, stiffness, damping)
-        self.spring1 = phy.DampedSpring(jelly.phy_body, body, (0, height), (width, height), rest_length, stiffness,
-                                       damping)
 
-        self.spring2 = phy.DampedSpring(jelly.phy_body, body, (0, -height), (width, -height), rest_length, stiffness,
-                                       damping)
+        start = jelly_pos + backwards_vec * (jelly.phy_shape.radius + 20)
+        self.center_chain = center_chain = self._create_chain(5, start, backwards_vec, canvas_after, mass=2)
+        first = center_chain[0]
+        rest_length = jelly.phy_body.position.get_distance(first[0].body.position)
+        spring = phy.DampedSpring(jelly.phy_body, first[0].body, (0, 0), (0, 0),
+                                  rest_length, stiffness, damping)
+        first[2].append(spring)
+
+        jelly_radius = jelly.phy_shape.radius
+
+        canvas_after.add(Color(rgba=(1.0, 0, 0, 0.8)))
+        # world pos
+        left_offset = jelly_pos + backwards_vec.perpendicular() * (jelly_radius * 0.6)
+        left_start = left_offset + backwards_vec * jelly_radius
+        left_chain = self._create_chain(5, left_start, backwards_vec, canvas_after)
+        first = left_chain[0]
+        rest_length = left_offset.get_distance(first[0].body.position)
+        offset = left_offset - jelly_pos
+        spring = phy.DampedSpring(jelly.phy_body, first[0].body, (offset.x, offset.y), (0, 0),
+                                  rest_length, stiffness, damping)
+        first[2].append(spring)
+
+        canvas_after.add(Color(rgba=(0, 1.0, 0, 0.8)))
+        right_offset = jelly_pos + backwards_vec.perpendicular().rotated_degrees(180) * (jelly_radius * 0.6)
+        right_start = right_offset + backwards_vec * jelly_radius
+        right_chain = self._create_chain(5, right_start, backwards_vec, canvas_after)
+        first = right_chain[0]
+        rest_length = right_offset.get_distance(first[0].body.position)
+        offset = right_offset - jelly_pos
+        spring = phy.DampedSpring(jelly.phy_body, first[0].body, (offset.x, offset.y), (0, 0),
+                                  rest_length, stiffness, damping)
+        first[2].append(spring)
+
+        self._cross_link(left_chain, center_chain)
+        self._cross_link(right_chain, center_chain)
+
+        self.chains = (left_chain, center_chain, right_chain)
+
+    def _cross_link(self, chain1, chain2):
+        "create springs with closest two points from the other chain"
+
+        stiffness = 20
+        damping = 5
+
+        for shape, _, springs in chain1:
+            # get closest 2 points in other chain
+            # construct list of 2 element touples (dist, body)
+            others = []
+            for shape2, _, _ in chain2:
+                others.append((shape.body.position.get_distance(shape2.body.position), shape2.body))
+
+            others.sort(key=lambda x: x[0])
+
+            # Springs with first two
+            for x in (0, 1):
+                dist, body = others[x]
+                spring = phy.DampedSpring(shape.body, body, (0, 0), (0, 0),
+                                          dist, stiffness, damping)
+
+                springs.append(spring)
 
 
-        # rotation acts on angle; might be useful if parts are offset
 
 
-        # self.rot_spring = phy.DampedRotarySpring(jelly.phy_body, body, 0, stiffness*10, damping)
-        # jelly.phy_space.add(spring)
-        # max_bias, max_force?
 
-        # canvas = Canvas(opacity=1.0)
-        with jelly.canvas.after:
-            Color(rgba=(0, 0, 1.0, 0.8))
+    def _create_chain(self, num, starting_pos, along_vector, canvas, mass = 1, radius = 10):
 
-            print('tent pos', pos)
-            # self.ellipse = Ellipse(pos=(pos.x-radius, pos.y-radius), size=(radius*2, radius*2))
-            PushMatrix()
-            self._trans = Translate()
-            self._rot = Rotate()
-            self.rect = Rectangle(pos=(-width, -height), size=(width * 2, height * 2))
-            PopMatrix()
+        dist_apart = 5 * radius  # rest length
+
+        stiffness = 50
+        damping = 15
+
+
+        center_chain = []
+        for n in range(num):
+            moment = phy.moment_for_circle(mass, 0, radius)
+            body = phy.Body(mass, moment)
+            shape = phy.Circle(body, radius)
+            shape.friction = 0.4
+            shape.elasticity = 0.3
+            body.position = starting_pos + along_vector * (dist_apart * n)
+
+            e = Ellipse(pos=(body.position.x - radius, body.position.y - radius), size=(radius * 2.0, radius * 2.0))
+            canvas.add(e)
+
+            springs = []
+            if n > 0:
+                # attach spring to previous
+                spring = phy.DampedSpring(center_chain[n - 1][0].body, body, (0, 0), (0, 0), dist_apart, stiffness,
+                                          damping)
+                springs.append(spring)
+
+            center_chain.append((shape, e, springs))
+
+            mass *= 0.8
+
+        return center_chain
+
+
+        self.update()
 
 
 
     def update(self):
-        body = self.phy_body
-        # self.rect.pos = (body.position.x-self.half_width, body.position.y-self.half_height)
-        self._trans.xy = (body.position.x, body.position.y)
+        for chain in self.chains:
+            for shape, drawn_ellipse, spring in chain:
+                body = shape.body
+                drawn_ellipse.pos = body.position.x - shape.radius, body.position.y - shape.radius
 
-        # +counter-clockwise (axis vertical)
-        self._rot.angle = degrees(body.angle)
-        # self.angle = degrees(body.angle)  # adjust orientation of the widget
+                # drag force
+                drag_force = body.velocity.rotated_degrees(180) * (body.velocity.get_length_sqrd() * 0.000001)
+                body.apply_impulse(drag_force)
+
+        # make sure center chain isn't too out of whack
+        # couldn't find constraints to do this for me
+        jelly_body = self.jelly.phy_body
+        first_body = self.center_chain[0][0].body
+        vec_to_jelly = jelly_body.position - first_body.position
+        angle_diff = jelly_body.rotation_vector.get_angle_between(vec_to_jelly)
+        #print(angle_diff)
+        force = vec_to_jelly.perpendicular_normal() * (angle_diff * 20)
+        first_body.apply_impulse(force)
+
+
+
+
 
     def bind_physics_space(self, space):
-        space.add(self.phy_body, self.phy_shape)
-        space.add(self.spring1)
-        space.add(self.spring2)
+        # space.add(self.phy_body, self.phy_shape)
+        # space.add(self.spring1)
+        # space.add(self.spring2)
         # space.add(self.rot_spring)
+
+        for chain in self.chains:
+            for shape, drawn_ellipse, spring in chain:
+                space.add(shape.body, shape)
+                space.add(spring)
+
+    def translate(self, translation_vector):
+        for chain in self.chains:
+            for shape, drawn_ellipse, spring in chain:
+                shape.body.position += translation_vector
+
 
 
 class Jelly(Creature):
@@ -458,8 +552,8 @@ class Jelly(Creature):
         #self.phy_body.activate()
         # power = (5000 if self.bell_push_dir else -500) * v_diff
         # impulse = Vec2d(0, 1) * power
-        push_factor = 0.1
-        power = self.cross_area * v_diff * (push_factor if self.bell_push_dir else -push_factor)
+        push_factor = 0.2
+        power = self.cross_area * v_diff * (push_factor if self.bell_push_dir else -0.8*push_factor)
 
 
         # Apply impulse off-center to rotate
@@ -468,7 +562,7 @@ class Jelly(Creature):
         if self.orienting:
             angle_diff = self.orienting_angle - self.angle
             # TODO use orienting_throttle
-            offset_dist = radius * 0.2
+            offset_dist = radius * 0.5
             if angle_diff > 0:
                 offset_dist *= -1
 

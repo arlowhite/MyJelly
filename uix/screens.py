@@ -60,6 +60,7 @@ class JellyEnvironmentScreen(Screen):
         # http://niko.in.ua/blog/using-physics-with-kivy/
         # kw - is some key-word arguments for configuting Space
         self.phy_space = space = phy.Space()
+        # space.damping = 0.9
 
         # wall = phy.Segment(phy.Body(), (0, 1), (3000, 1), 0.0)
         # wall.friction = 0.8
@@ -90,7 +91,7 @@ class JellyEnvironmentScreen(Screen):
             break # FIXME remove
 
         Clock.schedule_interval(self.update_simulation, self.update_interval)
-        Clock.schedule_interval(self.change_behavior, 20)
+        Clock.schedule_interval(self.change_behavior, 30)
         self.change_behavior(0.0)
 
 
