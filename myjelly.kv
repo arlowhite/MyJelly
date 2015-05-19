@@ -95,6 +95,10 @@
                     # FIXME Manage previous button
                     on_press: app.open_screen('JellySelectionScreen')
 
+                ActionButton:
+                    text: 'Delete'  # TODO Confirmation
+                    on_press: root.delete_jelly()
+
         BoxLayout:
             orientation: 'vertical'
 

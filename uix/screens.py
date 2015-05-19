@@ -19,7 +19,7 @@ from visuals.creatures import Jelly
 from uix.elements import JellySelectButton
 from uix.animation_constructors import AnimationConstructor
 
-from data.state_storage import load_jelly_storage, load_all_jellies
+from data.state_storage import load_jelly_storage, load_all_jellies, delete_jelly
 
 class AppScreen(Screen):
 
@@ -70,13 +70,16 @@ class JellyEnvironmentScreen(Screen):
         # wall.friction = 0.8
         # space.add(wall)
 
-
+        jelly_num = 1
         for store in load_all_jellies():
             for x in range(1):
                 Logger.debug('Creating Jelly %s', store['info']['id'])
-                # pos = random.randint(110, self.width-110), random.randint(110, self.height-110)
-                pos = self.width/2.0, self.height/2.0
-                j = Jelly(jelly_store=store, pos=pos)
+                pos = random.randint(110, self.width-110), random.randint(110, self.height-110)
+                # pos = self.width/2.0, self.height/2.0
+                # angle = random.randint(-180, 180)
+                angle = 90
+                j = Jelly(jelly_store=store, pos=pos, angle=angle, phy_group_num=jelly_num)
+                jelly_num += 1
                 #j.speed = random.uniform(0, 10.0)
                 # j.scale = random.uniform(0.75, 2.0)
                 # j.scale = 0.5
@@ -88,18 +91,18 @@ class JellyEnvironmentScreen(Screen):
                 self.add_widget(j)
                 j.bind_physics_space(space)
 
-            break # FIXME remove
+            # break # FIXME remove
 
         Clock.schedule_interval(self.update_simulation, self.update_interval)
-        Clock.schedule_interval(self.change_behavior, 30)
-        self.change_behavior(0.0)
+        # Clock.schedule_interval(self.change_behavior, 30)
+        # self.change_behavior(0.0)
 
 
     def change_behavior(self, dt):
         # TODO Move angle changing code to Jelly
         for c in self.children:
             angle = c.angle + random.randint(-70, 70)
-            print('current angle=%d  orienting %d deg'%(c.angle, angle))
+            print('current angle=%f  orienting %f deg'%(c.angle, angle))
             c.orient(angle)
 
 
@@ -148,6 +151,10 @@ class JellyDesignScreen(AppScreen):
         self.jelly_id = kwargs['jelly_id']
         super(JellyDesignScreen, self).__init__(**kwargs)
 
+    def delete_jelly(self):
+        delete_jelly(self.jelly_id)
+        # TODO user popup message & undo option
+        App.get_running_app().open_screen('JellySelectionScreen')
 
 
 class JellyAnimationConstructorScreen(AppScreen):

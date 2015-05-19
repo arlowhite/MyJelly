@@ -57,14 +57,16 @@ def load_app_storage():
     return app_store
 
 
+def __jelly_json_path(jelly_id):
+    return P.join(get_jellies_dir(), jelly_id+'.json')
+
 def load_jelly_storage(jelly_id):
     if jelly_id is None or len(jelly_id) < 1:
         raise ValueError('Invalid jelly_id: %s', jelly_id)
 
     global jelly_stores
     if jelly_id not in jelly_stores:
-        data_dir = get_jellies_dir()
-        path = P.join(data_dir, jelly_id+'.json')
+        path = __jelly_json_path(jelly_id)
 
         new_store = not P.exists(path)
 
@@ -106,3 +108,12 @@ def load_all_jellies():
             Logger.warning('Non json file in jellies: %s', filename)
 
     return jellies
+
+def delete_jelly(jelly_id):
+    if jelly_id in jelly_stores:
+        del jelly_stores[jelly_id]
+
+    path = __jelly_json_path(jelly_id)
+    if P.exists(path):
+        Logger.info("Removing Jelly %s JSON: %s", jelly_id, path)
+        os.remove(path)

@@ -5,7 +5,7 @@ from math import cos, sin, radians, degrees, pi
 
 from kivy.logger import Logger
 from kivy.graphics import Rectangle, Triangle, Color, Rotate, Translate, InstructionGroup, PushMatrix, PopMatrix, \
-    PushState, PopState, Canvas, Mesh, Scale, Ellipse, Line
+    PushState, PopState, Canvas, Mesh, Scale, Ellipse, Line, ClearColor
 from kivy.vector import Vector
 from kivy.core.image import Image as CoreImage
 from kivy.core.image import ImageLoader
@@ -67,6 +67,8 @@ class Creature(Widget):
         self.orienting_angle = 0
         self.orienting_throttle = 1.0
 
+        self.phy_group_num = kwargs.get('phy_group_num', 0)
+
         # TODO think about scaling mass volume cubic?
         mass = 1e5  # mass of the body i.e. linear moving inertia
         moment = 1e5  # moment of inertia, i.e. rotation inertia
@@ -81,15 +83,17 @@ class Creature(Widget):
         self.phy_shape = phy.Circle(body, radius, (0, 0))
         self.phy_shape.friction = 0.4
         self.phy_shape.elasticity = 0.3
+        self.phy_shape.group = self.phy_group_num
         #body.position = 400, 100  # set some position of body in simulated space coordinates
 
         super(Creature, self).__init__(**kwargs)
         body.position = self.pos
+        body.angle = radians(self.angle)
 
         self.draw()
 
         # .draw() needs to create ._trans before on_pos, so late bind
-        self.bind(pos=self.on_pos_changed)
+        self.bind(pos=self.on_pos_changed, angle=self.on_angle_changed)
 
     def bind_physics_space(self, space):
         '''Attach to the given physics space'''
@@ -100,16 +104,19 @@ class Creature(Widget):
             bp.bind_physics_space(space)
 
     def draw(self):
-        with self.canvas.before:
-            PushMatrix()
-            PushState()
-
-        with self.canvas.after:
-            PopMatrix()
-            PopState()
+        # with self.canvas.before:
+        #     PushMatrix()
+        #     PushState()
+        #
+        # with self.canvas.after:
+        #     PopMatrix()
+        #     PopState()
 
 
         with self.canvas:
+            PushMatrix()
+            PushState()
+
             self._color = Color(1, 1, 1, 1)
 
             # Control size without recalculating vertices
@@ -140,6 +147,8 @@ class Creature(Widget):
                 Color(rgba=(0.0, 1.0, 0.0, 0.8))
                 self._orienting_line = Line(width=1.2)
 
+            PopMatrix()
+            PopState()
 
 
     def move(self, x, y):
@@ -167,7 +176,7 @@ class Creature(Widget):
         # TODO what does z do for 2D?
         self._scale.xyz = (scale, scale, 1.0)
 
-    def on_angle(self, _, angle):
+    def on_angle_changed(self, _, angle):
         # I think this is due to Jelly being drawn vertically, but need to think about how to code this correction best
         self._rot.angle = angle - 90  # rotate 90 deg clockwise to correct direction
         # FIXME angle%360? or -180 to 180  see what Scale does
@@ -253,6 +262,9 @@ class TentacleBodyPart():
 
         self.jelly = jelly
 
+        anim = jelly.store['tentacles']
+        anim_setup = anim['steps']['__setup__']
+
 
         # 3 lines of circles
         # center line a bit stiffer and more massive
@@ -265,13 +277,22 @@ class TentacleBodyPart():
 
 
         canvas_after = jelly.canvas.after
-        canvas_after.add(Color(rgba=(0, 0, 1.0, 0.8)))
+        canvas_after.add(Color(rgba=(0, 0, 1.0, 0.3)))
 
         stiffness = 100
         damping = 50
+        tentacles_total_mass = 0.8 * jelly.phy_body.mass
 
+        radius = 12
+        dist_apart = 3 * radius  # rest length
         start = jelly_pos + backwards_vec * (jelly.phy_shape.radius + 20)
-        self.center_chain = center_chain = self._create_chain(5, start, backwards_vec, canvas_after, mass=2)
+        positions = [start + backwards_vec * (dist_apart * n) for n in range(2)]
+
+        center_chain_mass = 0.5 * tentacles_total_mass
+        outer_chain_mass = tentacles_total_mass - center_chain_mass
+        self.center_chain = center_chain = self._create_chain(positions, canvas_after,
+                                                              radius=radius, mass=center_chain_mass/len(positions))
+
         first = center_chain[0]
         rest_length = jelly.phy_body.position.get_distance(first[0].body.position)
         spring = phy.DampedSpring(jelly.phy_body, first[0].body, (0, 0), (0, 0),
@@ -280,39 +301,91 @@ class TentacleBodyPart():
 
         jelly_radius = jelly.phy_shape.radius
 
-        canvas_after.add(Color(rgba=(1.0, 0, 0, 0.8)))
-        # world pos
-        left_offset = jelly_pos + backwards_vec.perpendicular() * (jelly_radius * 0.6)
-        left_start = left_offset + backwards_vec * jelly_radius
-        left_chain = self._create_chain(5, left_start, backwards_vec, canvas_after)
-        first = left_chain[0]
-        rest_length = left_offset.get_distance(first[0].body.position)
-        offset = left_offset - jelly_pos
-        spring = phy.DampedSpring(jelly.phy_body, first[0].body, (offset.x, offset.y), (0, 0),
+        canvas_after.add(Color(rgba=(1.0, 0, 0, 0.3)))
+
+        # self._cross_link(right_chain, center_chain)
+        # FIXME Tentacles vertices don't need all this encoding
+        positions = []
+        vertices = anim_setup['vertices']
+
+        # TODO Make centroid it's own massive point? single point in center_chain?
+        translated_vertices = []
+        # FIXME Really hackish, but just using first center chain for now with original u, v
+        cent_pos = center_chain[0][0].body.position
+        translated_vertices.extend((cent_pos.x, cent_pos.y, vertices[2], vertices[3]))
+
+        # Start at 4 to skip centroid
+        tentacles_offset = backwards_vec * -30.0
+        for i in range(4, len(vertices), 4):
+            # within canvas to scale...
+            # These are in Image coordinates
+            # Can't just scale and rotate because it's attached to the physics system
+
+            xy = jelly.texture_xy_to_world(vertices[i], vertices[i+1]) + tentacles_offset
+            positions.append(xy)
+            translated_vertices.extend((xy.x, xy.y, vertices[i+2], vertices[i+3]))
+
+        self.outer_chain = outer_chain = self._create_chain(positions, canvas_after, loop_around=True,
+                                                            mass=outer_chain_mass/len(positions))
+
+
+        # Left Offset
+        offset = (0, jelly_radius*0.5)
+        offset_world_vec = Vec2d(offset).rotated_degrees(jelly.angle) + jelly_pos
+        # with canvas_after:
+        #     Rectangle(pos=(offset_world_vec.x, offset_world_vec.y), size=(10, 10))
+        # offset_vec = jelly_pos + backwards_vec.perpendicular() * (0.5 * jelly_radius)
+
+        # Get closest to offset in outer chain
+        closest = min(outer_chain, key=lambda x: x[0].body.position.get_distance(offset_world_vec))
+        closest_body = closest[0].body
+        rest_length = offset_world_vec.get_distance(closest_body.position)
+        spring = phy.DampedSpring(jelly.phy_body, closest_body, offset, (0, 0),
                                   rest_length, stiffness, damping)
-        first[2].append(spring)
+        closest[2].append(spring)
 
-        canvas_after.add(Color(rgba=(0, 1.0, 0, 0.8)))
-        right_offset = jelly_pos + backwards_vec.perpendicular().rotated_degrees(180) * (jelly_radius * 0.6)
-        right_start = right_offset + backwards_vec * jelly_radius
-        right_chain = self._create_chain(5, right_start, backwards_vec, canvas_after)
-        first = right_chain[0]
-        rest_length = right_offset.get_distance(first[0].body.position)
-        offset = right_offset - jelly_pos
-        spring = phy.DampedSpring(jelly.phy_body, first[0].body, (offset.x, offset.y), (0, 0),
+        # FIXME Setup groups some other way, Need to detect points that start inside
+        closest[0].group = jelly.phy_group_num
+
+        # Right Offset
+        offset = (0, -jelly_radius*0.5)
+        offset_world_vec = Vec2d(offset).rotated_degrees(jelly.angle) + jelly_pos
+        # with canvas_after:
+        #     Rectangle(pos=(offset_world_vec.x, offset_world_vec.y), size=(10, 10))
+        # offset_vec = jelly_pos + backwards_vec.perpendicular() * (0.5 * jelly_radius)
+
+        # Get closest to offset in outer chain
+        closest = min(outer_chain, key=lambda x: x[0].body.position.get_distance(offset_world_vec))
+        closest_body = closest[0].body
+        rest_length = offset_world_vec.get_distance(closest_body.position)
+        spring = phy.DampedSpring(jelly.phy_body, closest_body, offset, (0, 0),
                                   rest_length, stiffness, damping)
-        first[2].append(spring)
+        closest[2].append(spring)
 
-        self._cross_link(left_chain, center_chain)
-        self._cross_link(right_chain, center_chain)
+        # FIXME Setup groups some other way, Need to detect points that start inside
+        closest[0].group = jelly.phy_group_num
 
-        self.chains = (left_chain, center_chain, right_chain)
+        self._cross_link(outer_chain, center_chain, stiffness=stiffness*0.1, damping=damping*0.1)
 
-    def _cross_link(self, chain1, chain2):
+        self.chains = (center_chain, outer_chain)
+
+
+        # Setup Mesh
+
+        mesh_mode = str(anim['mesh_mode'])
+        if mesh_mode != 'triangle_fan':
+            raise ValueError('Need to calc centroid in other modes')
+
+        with jelly.canvas.before:
+            Color(rgba=(1.0, 1.0, 1.0, 1.0))
+            img = CoreImage(anim['image_filepath'])
+            indices = anim['indices']
+            self.mesh = mesh = Mesh(mode=mesh_mode, texture=img.texture, indices=indices,
+                                    vertices=translated_vertices)
+
+
+    def _cross_link(self, chain1, chain2, stiffness=20, damping=10):
         "create springs with closest two points from the other chain"
-
-        stiffness = 20
-        damping = 5
 
         for shape, _, springs in chain1:
             # get closest 2 points in other chain
@@ -331,40 +404,52 @@ class TentacleBodyPart():
 
                 springs.append(spring)
 
-
-
-
-
-    def _create_chain(self, num, starting_pos, along_vector, canvas, mass = 1, radius = 10):
-
-        dist_apart = 5 * radius  # rest length
+    def _create_chain(self, positions, canvas, mass=1, radius=10, loop_around=False):
 
         stiffness = 50
         damping = 15
+        prev = None
 
+        mypos = self.jelly.phy_body.position
+        farthest_dist = max(pos.get_distance(mypos) for pos in positions)
 
         center_chain = []
-        for n in range(num):
-            moment = phy.moment_for_circle(mass, 0, radius)
-            body = phy.Body(mass, moment)
+        for pos in positions:
+            # mass falls with distance from jelly
+            dist = mypos.get_distance(pos)
+            m = mass * (dist / farthest_dist)**2.0 + 0.2 * mass
+
+            moment = phy.moment_for_circle(m, 0, radius)
+            body = phy.Body(m, moment)
             shape = phy.Circle(body, radius)
             shape.friction = 0.4
             shape.elasticity = 0.3
-            body.position = starting_pos + along_vector * (dist_apart * n)
+            body.position = pos
+            Logger.debug("Creating chain body mass=%s position=%s radius=%s", m, pos, radius)
 
             e = Ellipse(pos=(body.position.x - radius, body.position.y - radius), size=(radius * 2.0, radius * 2.0))
             canvas.add(e)
 
             springs = []
-            if n > 0:
+            if prev:
                 # attach spring to previous
-                spring = phy.DampedSpring(center_chain[n - 1][0].body, body, (0, 0), (0, 0), dist_apart, stiffness,
+                dist_apart = prev[0].body.position.get_distance(body.position)
+                spring = phy.DampedSpring(prev[0].body, body, (0, 0), (0, 0), dist_apart, stiffness,
                                           damping)
                 springs.append(spring)
 
-            center_chain.append((shape, e, springs))
+            item = (shape, e, springs)
+            center_chain.append(item)
 
-            mass *= 0.8
+            prev = item
+
+        if loop_around:
+            last_body = body
+            body = center_chain[0][0].body
+            dist_apart = last_body.position.get_distance(body.position)
+            spring = phy.DampedSpring(last_body, body, (0, 0), (0, 0),
+                                      dist_apart, stiffness, damping)
+            center_chain[0][2].append(spring)
 
         return center_chain
 
@@ -374,14 +459,41 @@ class TentacleBodyPart():
 
 
     def update(self):
+
         for chain in self.chains:
             for shape, drawn_ellipse, spring in chain:
                 body = shape.body
                 drawn_ellipse.pos = body.position.x - shape.radius, body.position.y - shape.radius
 
                 # drag force
+                # FIXME High drag is warping out Jellies !?
                 drag_force = body.velocity.rotated_degrees(180) * (body.velocity.get_length_sqrd() * 0.000001)
                 body.apply_impulse(drag_force)
+
+
+        # Update Mesh vertices
+        verts = self.mesh.vertices
+        x = 0.0
+        y = 0.0
+        for i, item in enumerate(self.outer_chain):
+            pos = item[0].body.position
+            verts[4+i*4] = pos.x
+            verts[4+1+i*4] = pos.y
+
+            x += pos.x
+            y += pos.y
+
+        # Centroid
+        verts[0] = x / len(self.outer_chain)
+        verts[1] = y / len(self.outer_chain)
+        # pos = self.center_chain[0][0].body.position
+        # verts[0] = pos.x
+        # verts[1] = pos.y
+
+        # Just average all points
+
+        self.mesh.vertices = verts
+
 
         # make sure center chain isn't too out of whack
         # couldn't find constraints to do this for me
@@ -430,10 +542,20 @@ class Jelly(Creature):
         # However, this game focuses only on Jellies
         # So it's much easier to hard-code the knowledge of bell pulses, tentacle drift, etc.
         self.store = kwargs.get('jelly_store')
+        self.jelly_id = self.store['info']['id']
 
         super(Jelly, self).__init__(**kwargs)
 
-        self.body_parts.append(TentacleBodyPart(self))
+        try:
+            self.body_parts.append(TentacleBodyPart(self))
+        except KeyError:
+            Logger.info('%s has no tentacles information', self.jelly_id)
+
+    def texture_xy_to_world(self, x, y):
+        # position + adjustment + x|y
+        vec = Vec2d(x + self.centering_trans_x, y + self.centering_trans_y)
+        vec.rotate_degrees(self.angle - 90)
+        return vec + Vec2d(self.x, self.y)
 
 
     def draw_creature(self):
