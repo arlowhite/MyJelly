@@ -35,7 +35,7 @@ version.filename = %(source.dir)s/main.py
 # (list) Application requirements
 # comma seperated e.g. requirements = sqlite3,kivy
 #requirements = kivy==master
-requirements = kivy
+requirements = kivy, cymunk
 
 # (list) Garden requirements
 #garden_requirements =
@@ -109,7 +109,7 @@ android.p4a_dir =/home/awhite/Code/python/kivy/python-for-android
 android.ouya.category = GAME
 
 # (str) Filename of OUYA Console icon. It must be a 732x412 png image.
-#android.ouya.icon.filename = %(source.dir)s/data/ouya_icon.png
+android.ouya.icon.filename = %(source.dir)s/media/icons/ouya-icon.png
 
 # (str) XML file to include as an intent filters in <activity> tag
 #android.manifest.intent_filters =
