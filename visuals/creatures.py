@@ -22,6 +22,7 @@ from cymunk import Vec2d
 
 from drawn_visual import ControlPoint
 from animations import MeshAnimator, setup_step
+from misc.exceptions import InsufficientData
 
 
 def fix_angle(angle):
@@ -262,13 +263,15 @@ class TentacleBodyPart():
 
         self.jelly = jelly
 
-        anim = jelly.store['tentacles']
-        anim_setup = anim['steps']['__setup__']
+        try:
+            anim = jelly.store['tentacles']
+            anim_setup = anim['steps']['__setup__']
+        except KeyError as ex:
+            raise InsufficientData(repr(ex))
 
 
         # 3 lines of circles
         # center line a bit stiffer and more massive
-
 
 
         backwards_vec = jelly.phy_body.rotation_vector.rotated_degrees(180)
@@ -306,7 +309,10 @@ class TentacleBodyPart():
         # self._cross_link(right_chain, center_chain)
         # FIXME Tentacles vertices don't need all this encoding
         positions = []
+
         vertices = anim_setup['vertices']
+        if len(vertices) < 3:
+            raise InsufficientData('Only %d tentacle vertices'%len(vertices))
 
         # TODO Make centroid it's own massive point? single point in center_chain?
         translated_vertices = []
@@ -546,6 +552,8 @@ class Jelly(Creature):
 
         super(Jelly, self).__init__(**kwargs)
 
+        # super called draw_creature
+
         try:
             self.body_parts.append(TentacleBodyPart(self))
         except KeyError:
@@ -559,6 +567,9 @@ class Jelly(Creature):
 
 
     def draw_creature(self):
+        if hasattr(self, 'bell_mesh'):
+            raise AssertionError('Already called draw_creature!')
+
         # called with canvas
         store = self.store
 
