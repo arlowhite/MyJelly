@@ -36,7 +36,7 @@ class JellySelectButton(Button):
             print(pos)
             angle = 90
             j = Jelly(jelly_store=jelly_store, pos=pos, angle=angle, phy_group_num=1)
-            self.add_widget(j)
+            # FIXME wrap in CreatureWidget
             self.jelly = j
 
             # Loaded successfully, remove image

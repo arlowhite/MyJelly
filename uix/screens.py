@@ -39,6 +39,7 @@ class JellyEnvironmentScreen(Screen):
     # FIXME for now we're crazy and showing all Jellies
 
     def __init__(self, **kwargs):
+        self.creatures = []
         super(JellyEnvironmentScreen, self).__init__(**kwargs)
 
         # TODO different update intervals for physics/animations?
@@ -72,13 +73,13 @@ class JellyEnvironmentScreen(Screen):
 
         jelly_num = 1
         for store in load_all_jellies():
-            for x in range(1):
+            for x in range(5):
                 Logger.debug('Creating Jelly %s', store['info']['id'])
                 pos = random.randint(110, self.width-110), random.randint(110, self.height-110)
                 # pos = self.width/2.0, self.height/2.0
                 # angle = random.randint(-180, 180)
                 angle = 90
-                j = Jelly(jelly_store=store, pos=pos, angle=angle, phy_group_num=jelly_num)
+                j = Jelly(jelly_store=store, pos=pos, angle=angle, phy_group_num=jelly_num, parent=self)
                 jelly_num += 1
                 #j.speed = random.uniform(0, 10.0)
                 # j.scale = random.uniform(0.75, 2.0)
@@ -88,7 +89,9 @@ class JellyEnvironmentScreen(Screen):
                 # j.move(self.width/2., self.height/2.)
                 # j.move(random.randint(110, self.width), random.randint(110, self.height))
                 print("Jelly pos=%s, angle=%s"%(j.pos, j.angle))
-                self.add_widget(j)
+                # self.add_widget(j)
+                self.canvas.add(j.canvas)  # TODO is this right?
+                self.creatures.append(j)
                 j.bind_physics_space(space)
 
             # break # FIXME remove
@@ -115,7 +118,7 @@ class JellyEnvironmentScreen(Screen):
         # the collisions in the usual case.
         self.phy_space.step(self.update_interval)
 
-        for c in self.children:
+        for c in self.creatures:
             c.update(dt)
 
     def pause(self):

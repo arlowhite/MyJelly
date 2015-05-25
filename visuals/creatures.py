@@ -48,26 +48,21 @@ def fix_angle(angle):
 
 # TODO Probably just do EventDispatcher instead of Widget? Performance test # of Jellies limit
 # Single animation update loop instead of Animation Clocks for each? or chain Animations? &=
-class Creature(Widget):
+class Creature(object):
     """Visual entity that moves around (update called on game tick)
      and is attached to the Cymunk physics system"""
 
-    scale = NumericProperty(1.0)
-
-    # 0 points right, positive is counter-clockwise
-    # angle in degrees. Converted to -180 to 180
-    angle = BoundedNumericProperty(0.0, min=-180.0, max=180.0, errorhandler=fix_angle)
-
-    speed = NumericProperty(0.0)
-
     def __init__(self, **kwargs):
 
-        self.debug_visuals = True
-        # units?? Make KivyProperty? defaults?
+        self.debug_visuals = True  # TODO control with global config
+
+        self.parent = kwargs.get('parent', None)  # FIXME remove? shouldn't be aware of parent widget
+
         self.orienting = False  # is currently orienting toward orienting_angle
         self.orienting_angle = 0
         self.orienting_throttle = 1.0
 
+        # TODO just use a global for all creatures?
         self.phy_group_num = kwargs.get('phy_group_num', 0)
 
         # TODO think about scaling mass volume cubic?
@@ -77,6 +72,7 @@ class Creature(Widget):
         self.phy_body = body = phy.Body(mass, moment)
         self.phy_body.velocity_limit = 1000
 
+        # Composite body parts that update every tick
         self.body_parts = []
 
         #box = phy.Poly.create_box(body, size=(200, 100))
@@ -87,14 +83,70 @@ class Creature(Widget):
         self.phy_shape.group = self.phy_group_num
         #body.position = 400, 100  # set some position of body in simulated space coordinates
 
-        super(Creature, self).__init__(**kwargs)
-        body.position = self.pos
+        # Set properties that will be used within draw()
+        # pos and angle are stored in the physics objects
+        body.position = kwargs.get('pos', (0, 0))
         body.angle = radians(self.angle)
+
+        self.canvas = Canvas()
 
         self.draw()
 
-        # .draw() needs to create ._trans before on_pos, so late bind
-        self.bind(pos=self.on_pos_changed, angle=self.on_angle_changed)
+        # Scale is stored in Scale() object
+        self.scale = kwargs.get('scale', 1.0)
+
+
+    # Attributes API used externally
+    # Internally Physics body objects are directly referenced
+    @property
+    def pos(self):
+        """Returns Vec2d of physics body position"""
+        # TODO Leaking Vec2d type, but I don't think I care
+        return self.phy_body.position
+
+    @pos.setter
+    def pos(self, newpos):
+        old_pos = Vec2d(self.phy_body.position)
+
+        self.phy_body.position = newpos
+
+        # Move body parts as well
+        # TODO actually move body part visual as well instead of relying on update() to do it
+        move_diff_vec = self.phy_body.position - old_pos
+        for bp in self.body_parts:
+            bp.translate(move_diff_vec)
+
+        self._translate.xy = newpos
+
+
+    # Note: Cymunk does not modulo the angle and it can also be negative
+    # Think about the best way to deal with angle diffs...
+    # 5 - 355 = -350. Could +360 if < 0, but there must be an easier way.
+    # Maybe using vectors is better? angle between vectors? dot products?
+    @property
+    def angle(self):
+        """Get the current angle of the PhysicsEntity in degrees from -180 to 180
+        0 degrees is to the right.
+        """
+
+        return fix_angle(degrees(self.phy_body.angle))
+
+    @angle.setter
+    def angle(self, newangle):
+        "Set the angle in degrees"
+        newangle = radians(newangle)
+        self.phy_body.angle = newangle
+        self._rotate.angle = newangle - 90
+
+    @property
+    def scale(self):
+        return self._scale.x
+
+    @scale.setter
+    def scale(self, scale):
+        # TODO what does z do for 2D?
+        self._scale.xyz = (scale, scale, 1.0)
+
 
     def bind_physics_space(self, space):
         '''Attach to the given physics space'''
@@ -124,15 +176,15 @@ class Creature(Widget):
             self._scale = Scale(1, 1, 1)
 
             # Translate graphics to Creature's position
-            self._trans = Translate()
-            self._trans.xy = self.pos
+            self._translate = Translate()
+            self._translate.xy = self.pos
 
             if self.debug_visuals:
                 # Need to undo rotation when drawing orienting line
                 PushMatrix()
 
-            self._rot = Rotate()
-            self._rot.angle = self.angle - 90
+            self._rotate = Rotate()
+            self._rotate.angle = self.angle - 90
 
             self.draw_creature()
 
@@ -152,38 +204,8 @@ class Creature(Widget):
             PopState()
 
 
-    def move(self, x, y):
-        """Set position in physics and visual systems"""
-        old_pos = Vec2d(self.phy_body.position)
-        self.phy_body.position = x, y
-        self.pos = x, y
-
-        # Move body parts as well
-        # TODO actually move body part visual as well instead of relying on update() to do it
-        move_diff_vec = self.phy_body.position - old_pos
-        for bp in self.body_parts:
-            bp.translate(move_diff_vec)
-
-    def change_angle(self, angle):
-        """Set angle (degrees) in physics and visual systems"""
-        self.phy_body.angle = radians(angle)
-        self.angle = angle
 
 
-    def on_pos_changed(self, jelly_obj, coords):
-        self._trans.xy = coords
-
-    def on_scale(self, _, scale):
-        # TODO what does z do for 2D?
-        self._scale.xyz = (scale, scale, 1.0)
-
-    def on_angle_changed(self, _, angle):
-        # I think this is due to Jelly being drawn vertically, but need to think about how to code this correction best
-        self._rot.angle = angle - 90  # rotate 90 deg clockwise to correct direction
-        # FIXME angle%360? or -180 to 180  see what Scale does
-        # TODO update physics
-
-        #self.canvas.ask_update()  # TODO update necessary?
 
 
     def orient(self, angle, throttle=1.0):
@@ -202,7 +224,10 @@ class Creature(Widget):
     def update(self, dt):
         """Called after physics space has done a step update"""
 
+        # Optimization: Set angle and pos on phy_body directly to avoid extra function execution
         body = self.phy_body
+
+        # 1. Apply forces to body
         # TODO drag, continuous force? how to update instead of adding new, just reset? look at arrows example
 
         drag_const = 0.0000000001  # drag coeficcent * density of fluid
@@ -211,20 +236,24 @@ class Creature(Widget):
         self.phy_body.apply_impulse(drag_force)
 
         # Update visual position and rotation with information from physics Body
-        body = self.phy_body
-        x = body.position.x
-        y = body.position.y
+
 
         # +counter-clockwise (axis vertical)
-        self.angle = degrees(body.angle)  # adjust orientation of the widget
+        self._rotate.angle = degrees(body.angle) - 90 # adjust orientation graphics
 
+        # Update body parts
         for bp in self.body_parts:
             bp.update()
 
 
-        # TODO Does physics system have way of bounding?
+        # Check if in bounds, wrap to other side if out
+        # TODO Bounding shouldn't be in this Class
+        x = body.position.x
+        y = body.position.y
+
         parent = self.parent
         out_of_bounds = False
+
         if y > parent.height:
             y = 1
             out_of_bounds = True
@@ -242,15 +271,17 @@ class Creature(Widget):
             out_of_bounds = True
 
         if out_of_bounds:
-            self.move(x, y)
-        else:
+            # Trigger move of main body and body-parts
             self.pos = (x, y)
+        else:
+            self._translate.xy = (x, y)
+
 
         # Needed at all?
         # update_creature()
 
 
-
+    # TODO this should be done differently, think about AOP/Component oriented programming
     def set_behavior(self, b):
         self.current_behavior = b
         # TODO think about this API
@@ -282,8 +313,8 @@ class TentacleBodyPart():
         canvas_after = jelly.canvas.after
         canvas_after.add(Color(rgba=(0, 0, 1.0, 0.3)))
 
-        stiffness = 100
-        damping = 50
+        stiffness = 10
+        damping = 5
         tentacles_total_mass = 0.8 * jelly.phy_body.mass
 
         radius = 12
@@ -334,7 +365,8 @@ class TentacleBodyPart():
         self.outer_chain = outer_chain = self._create_chain(positions, canvas_after, loop_around=True,
                                                             mass=outer_chain_mass/len(positions))
 
-
+        closest_stiffness = 1000
+        closest_damping = 500
         # Left Offset
         offset = (0, jelly_radius*0.5)
         offset_world_vec = Vec2d(offset).rotated_degrees(jelly.angle) + jelly_pos
@@ -347,7 +379,7 @@ class TentacleBodyPart():
         closest_body = closest[0].body
         rest_length = offset_world_vec.get_distance(closest_body.position)
         spring = phy.DampedSpring(jelly.phy_body, closest_body, offset, (0, 0),
-                                  rest_length, stiffness, damping)
+                                  rest_length, closest_stiffness, closest_damping)
         closest[2].append(spring)
 
         # FIXME Setup groups some other way, Need to detect points that start inside
@@ -365,7 +397,7 @@ class TentacleBodyPart():
         closest_body = closest[0].body
         rest_length = offset_world_vec.get_distance(closest_body.position)
         spring = phy.DampedSpring(jelly.phy_body, closest_body, offset, (0, 0),
-                                  rest_length, stiffness, damping)
+                                  rest_length, closest_stiffness, closest_damping)
         closest[2].append(spring)
 
         # FIXME Setup groups some other way, Need to detect points that start inside
@@ -563,7 +595,7 @@ class Jelly(Creature):
         # position + adjustment + x|y
         vec = Vec2d(x + self.centering_trans_x, y + self.centering_trans_y)
         vec.rotate_degrees(self.angle - 90)
-        return vec + Vec2d(self.x, self.y)
+        return vec + Vec2d(*self.pos)
 
 
     def draw_creature(self):
@@ -685,7 +717,7 @@ class Jelly(Creature):
         #self.phy_body.activate()
         # power = (5000 if self.bell_push_dir else -500) * v_diff
         # impulse = Vec2d(0, 1) * power
-        push_factor = 0.2
+        push_factor = 0.5
         power = self.cross_area * v_diff * (push_factor if self.bell_push_dir else -0.8*push_factor)
 
 
