@@ -73,12 +73,11 @@
     height: cm(6)
     size_hint_y: None
 
-    Image:
-        id: image
-        source: root.image_filename
+    CreatureWidget:
+        id: creature_widget
         pos: root.pos
         size: root.size
-        allow_stretch: True
+
 
 <JellyDesignScreen>:
     BoxLayout:

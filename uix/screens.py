@@ -15,7 +15,7 @@ from kivy.animation import Animation
 import cymunk as phy
 
 from visuals.animations import setup_step
-from visuals.creatures import Jelly
+from visuals.creatures.jelly import Jelly
 from uix.elements import JellySelectButton
 from uix.animation_constructors import AnimationConstructor
 
@@ -73,7 +73,7 @@ class JellyEnvironmentScreen(Screen):
 
         jelly_num = 1
         for store in load_all_jellies():
-            for x in range(5):
+            for x in range(1):
                 Logger.debug('Creating Jelly %s', store['info']['id'])
                 pos = random.randint(110, self.width-110), random.randint(110, self.height-110)
                 # pos = self.width/2.0, self.height/2.0
@@ -97,14 +97,14 @@ class JellyEnvironmentScreen(Screen):
             # break # FIXME remove
 
         Clock.schedule_interval(self.update_simulation, self.update_interval)
-        # Clock.schedule_interval(self.change_behavior, 30)
+        # Clock.schedule_interval(self.change_behavior, 20)
         # self.change_behavior(0.0)
 
 
     def change_behavior(self, dt):
         # TODO Move angle changing code to Jelly
-        for c in self.children:
-            angle = c.angle + random.randint(-70, 70)
+        for c in self.creatures:
+            angle = c.angle + random.randint(-180, 180)
             print('current angle=%f  orienting %f deg'%(c.angle, angle))
             c.orient(angle)
 

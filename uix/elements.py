@@ -11,18 +11,55 @@ from kivy.uix.widget import Widget
 from kivy.uix.button import Button
 from kivy.uix.spinner import Spinner
 from kivy.properties import ListProperty, StringProperty
+from kivy.clock import Clock
 
-from visuals.creatures import Jelly
+import cymunk as phy
+
+from visuals.creatures.jelly import Jelly
 from misc.exceptions import InsufficientData
 
 class CreatureWidget(Widget):
     """Contains and centers a Creature"""
+
+    def set_creature(self, creature):
+        self.update_interval = 1/60.0
+        self.creature = creature
+        creature.pos = self.center
+
+        self.phy_space = phy.Space()
+        creature.bind_physics_space(self.phy_space)
+        self.canvas.add(creature.canvas)
+
+        Clock.schedule_interval(self.update_simulation, self.update_interval)
+
+    def update_simulation(self, dt):
+        self.phy_space.step(self.update_interval)
+        self.creature.update(dt)
+        # Reset position to center
+        self.creature.pos = self.center
+
+    def on_center(self, _, center):
+        if hasattr(self, 'creature'):
+            self.creature.pos = center
+
+    # def on_size(self):
+    #     pass
+
+        # FIXME old KV code for Image
+        # Image:
+        # id: image
+        # source: root.image_filename
+        # pos: root.pos
+        # size: root.size
+        # allow_stretch: True
+
 
 class JellySelectButton(Button):
     "Selection button displayed in JellySelectionScreen"
     # Note: Button binding done in KV
 
     def __init__(self, jelly_store, **kwargs):
+        # TODO move to CreatureWidget?
         self.store = jelly_store
         info = jelly_store['info']
         self.jelly_id = info['id']
@@ -32,15 +69,13 @@ class JellySelectButton(Button):
 
         try:
             # Create moving Jelly
-            pos = self.center
-            print(pos)
             angle = 90
-            j = Jelly(jelly_store=jelly_store, pos=pos, angle=angle, phy_group_num=1)
-            # FIXME wrap in CreatureWidget
+            j = Jelly(jelly_store=jelly_store, angle=angle, phy_group_num=1)
             self.jelly = j
+            self.ids.creature_widget.set_creature(j)
 
             # Loaded successfully, remove image
-            self.remove_widget(self.ids.image)
+            # self.remove_widget(self.ids.image)
 
 
         except InsufficientData as ex:
@@ -49,12 +84,6 @@ class JellySelectButton(Button):
         except:
             Logger.exception("Problem previewing Jelly %s", self.jelly_id)
             raise
-
-    def on_center(self, *args):
-        if hasattr(self, 'jelly'):
-            self.jelly.move(*self.center)
-
-
 
     def on_release(self):
         # TODO long press to edit? Other options, delete, etc. Action Menu of JellyEditor?

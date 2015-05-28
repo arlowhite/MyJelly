@@ -42,6 +42,9 @@ class MeshAnimator(EventDispatcher):
         self.initial_vertices = None
         self.initial_indices = None
 
+        # Needed to Clock schedule this function
+        self._start_animation_lambda = lambda dt: self.start_animation()
+
         super(MeshAnimator, self).__init__(**kwargs)
 
 
@@ -124,7 +127,8 @@ class MeshAnimator(EventDispatcher):
         # Delay after current step
         delay_thing = self.vertices_states[self.step].delay
         if delay_thing:
-            Clock.schedule_once(self.start_animation, evaluate_thing(delay_thing))
+            # schedule_once will pass dt to start_animation(), which we don't want
+            Clock.schedule_once(self._start_animation_lambda, evaluate_thing(delay_thing))
 
         else:
             self.start_animation()
