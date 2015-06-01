@@ -132,7 +132,7 @@ def delete_jelly(jelly_id):
         os.remove(path)
 
 
-valid_construct_value_types = (str, unicode, int, long, float, bool, list)
+valid_construct_value_types = frozenset((str, unicode, int, long, float, bool, list))
 
 def construct_value(object, **merge_kwargs):
     """Construct a value from a JSON object retrieved from storage.
@@ -172,7 +172,7 @@ def construct_value(object, **merge_kwargs):
 
     else:
         # Should be correct type already from JSON
-        if not isinstance(object, valid_construct_value_types):
+        if type(object) not in valid_construct_value_types:
             raise AssertionError('Object of type {} is not a valid value type'.format(type(object)))
 
         return object

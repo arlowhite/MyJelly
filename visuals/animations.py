@@ -26,6 +26,12 @@ class MeshAnimator(EventDispatcher):
     Programmer should set MeshAnimator.mesh and make sure indices on Mesh are set.
     """
 
+    # This class shouldn't ever need dictionary functionality and is instantiated fairly often
+    __slots__ = ('step', 'step_names', 'mesh', 'mesh_mode', 'previous_step',
+                 'vertices_states', 'initial_vertices', 'initial_indices',
+                 '_animation', '_start_animation_lambda',
+                 '_previous_step_vertices', '_next_step_vertices')
+
     # variables that are animated and used to adjust vertices
     horizontal_fraction = NumericProperty(0.0)
     vertical_fraction = NumericProperty(0.0)
