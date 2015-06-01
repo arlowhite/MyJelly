@@ -98,7 +98,7 @@ class MyJellyApp(App):
     #     game = self.root
     #
     #
-    #     jelly = Jelly()
+    #     jelly = JellyBell()
     #     #jelly.center = game.center
     #     #jelly.pos = (200, 200)
     #     #center

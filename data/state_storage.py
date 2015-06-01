@@ -4,11 +4,24 @@ __author__ = 'awhite'
 
 import os.path as P
 import os
+import inspect
 
 from kivy.storage.jsonstore import JsonStore
 from kivy.app import App
 from kivy.logger import Logger
 from datetime import datetime
+
+import constructable
+constructable_members = {}
+for member in inspect.getmembers(constructable):
+    if member[0].startswith('_'):
+        continue
+
+    clazz = member[1]
+    path = '{}.{}'.format(clazz.__module__, clazz.__name__)
+    constructable_members[path] = clazz
+
+from misc.exceptions import InsufficientData
 
 jelly_stores = {}
 app_store = None
@@ -84,7 +97,7 @@ def load_jelly_storage(jelly_id):
             raise
 
         if new_store:
-            store['info'] = {'created_datetime':datetime.utcnow().isoformat()}
+            store['info'] = {'created_datetime': datetime.utcnow().isoformat()}
 
         jelly_stores[jelly_id] = store
 
@@ -105,7 +118,7 @@ def load_all_jellies():
                 Logger.error('Failed to load %s, will not be in all_jellies list', jelly_id)
                 pass
         else:
-            Logger.warning('Non json file in jellies: %s', filename)
+            Logger.warning('state_storage: Non json file in jellies "%s"', filename)
 
     return jellies
 
@@ -117,3 +130,77 @@ def delete_jelly(jelly_id):
     if P.exists(path):
         Logger.info("Removing Jelly %s JSON: %s", jelly_id, path)
         os.remove(path)
+
+
+valid_construct_value_types = (str, unicode, int, long, float, bool, list)
+
+def construct_value(object, **merge_kwargs):
+    """Construct a value from a JSON object retrieved from storage.
+    dicts will be recursively constructed. The root dict should have just on key & value.
+
+    merge_kwargs -- optional additional kwargs to merge into kwargs of Constructor
+
+    For example:
+    {'visuals.creatures.jelly.JellyBell':{
+    mesh_animator:X,
+    mesh_mode:X
+    }
+
+    Where value of X is passed to recursive call of construct_value. Then JellBell() constructor
+    is called.
+
+    Non-dicts are returned if they are valid types.
+    """
+
+    if isinstance(object, dict):
+        if len(object) != 1:
+            raise AssertionError('Expect just one key that is a Constructor module path')
+
+        constructor_path, arguments_dict = object.items()[0]
+        Constructor = constructable_members[constructor_path]
+
+        kwargs = {}
+        for argument_name, value in arguments_dict.viewitems():
+            kwargs[argument_name] = construct_value(value)
+
+        if merge_kwargs:
+            kwargs.update(merge_kwargs)
+
+        Logger.debug('state_storage: construct_value() calling {}({})'
+                     .format(constructor_path, kwargs))
+        return Constructor(**kwargs)
+
+    else:
+        # Should be correct type already from JSON
+        if not isinstance(object, valid_construct_value_types):
+            raise AssertionError('Object of type {} is not a valid value type'.format(type(object)))
+
+        return object
+
+
+    # if dictionary need to recurse
+
+def construct_creature(store, **merge_kwargs):
+    """Construct """
+    constructor_names = store['info']['creature_constructors']
+    creature_id = store['info']['id']
+
+    if not constructor_names:
+        raise InsufficientData('creature_constructors empty')
+
+    Logger.debug('state_storage: construct_creature() id=%s, constructors=%s', creature_id, constructor_names)
+
+    merge_kwargs.update({'creature_id': creature_id})
+    creature = construct_value(store[constructor_names[0]], **merge_kwargs)
+
+    # for name in constructor_names[1:]:
+    #     constructor_module_path = store[name]
+    #
+    #     class_path = store[name]
+        # __import__(Class)
+        # Class = sys.modules[class_path]
+
+    return creature
+
+
+

@@ -10,6 +10,9 @@ from kivy.vector import Vector
 from visuals.animations import MeshAnimator, setup_step
 from visuals.drawn_visual import ControlPoint
 
+from misc.util import deprecated
+from data.state_storage import construct_value
+
 __author__ = 'awhite'
 
 
@@ -59,7 +62,6 @@ class AnimationConstructor(Scatter):
             self.mesh = Mesh(mode=self.mesh_mode)
 
     def on_mesh_mode(self, _, mode):
-        print('mesh_mode', mode)
         self.mesh.mode = str(mode)
 
     def set_animation_data(self, data, animation_step=setup_step):
@@ -167,8 +169,40 @@ class AnimationConstructor(Scatter):
         finally:
             self.animate_changes = True
 
+    def create_mesh_animator_construction(self):
+        """Create the dictionary structure (usable in JSON storage) that will generate
+        the MeshAnimator"""
+
+        anim_steps = []
+
+        bell_horiz_transition_out = 'in_back'
+        bell_vert_transition_out = 'out_cubic'
+        bell_horiz_transition_in = 'in_sine'
+        bell_vert_transition_in = 'out_back'
+        # TODO delay random.triangular(0.3, 2.0, 0.5)
+
+        initial_vertices, initial_indices = self.calc_mesh_vertices(setup_step, update_mesh=False)
+
+        for step_name in self.animation_steps_order:
+            vertices, _ = self.calc_mesh_vertices(step_name, update_mesh=False)
+            # TODO Duration should be set in Tweaks, this should just be default
+            # Don't overwrite if Tweaks modified
+            duration = 2.4 if step_name == 'open_bell' else 0.65
+
+            anim_steps.append(dict(step_name=step_name, vertices=vertices,
+                                   duration=duration,
+                                   horizontal_transition='in_back', vertical_transition='out_cubic'))
+
+        mesh_anim_args = {'mesh_mode': self.mesh_mode,
+                          'steps': anim_steps,
+                          'initial_vertices': initial_vertices,
+                          'initial_indices': initial_indices}
+
+        return {'visuals.animations.MeshAnimator': mesh_anim_args}
+
+    @deprecated
     def get_animation_data(self):
-        "Generate animation data for storage in store"
+        """Generate animation data (as dictionary) for storage in store"""
 
         # animation_data vs control_point data
         # first vertex is the triangle_fan point....
@@ -188,7 +222,6 @@ class AnimationConstructor(Scatter):
         step_set = set(self.animation_steps_order)
         if setup_step not in step_set:
             step_set.add(setup_step)
-
 
         for step in step_set:
             verts, indices = self.calc_mesh_vertices(step, update_mesh=False)
@@ -446,9 +479,8 @@ class AnimationConstructor(Scatter):
         "Start/Stop animation preview"
 
         if activate_preview:
-            a = MeshAnimator.from_animation_data(self.get_animation_data())
+            self.mesh_animator = a = construct_value(self.create_mesh_animator_construction())
             a.mesh = self.mesh
-            self.mesh_animator = a
             self.animating = True
             a.start_animation()
 

@@ -54,7 +54,12 @@ class Creature(object):
     """Visual entity that moves around (update called on game tick)
      and is attached to the Cymunk physics system"""
 
-    def __init__(self, **kwargs):
+    def __init__(self, creature_id=None, **kwargs):
+
+        if creature_id is None:
+            raise AssertionError('creature_id must be provided!')
+
+        self.creature_id = creature_id
 
         self.debug_visuals = True  # TODO control with global config
 

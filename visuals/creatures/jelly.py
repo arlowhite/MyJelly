@@ -4,8 +4,8 @@ import random
 from math import cos, sin, radians, degrees, pi
 
 from kivy.logger import Logger
-from kivy.graphics import Rectangle, Triangle, Color, Rotate, Translate, InstructionGroup, PushMatrix, PopMatrix, \
-    PushState, PopState, Canvas, Mesh, Scale, Ellipse, Line, ClearColor
+from kivy.graphics import Color, Translate, PushMatrix, PopMatrix, \
+    Mesh, Ellipse, Line
 from kivy.core.image import Image as CoreImage
 from kivy.clock import Clock
 
@@ -14,37 +14,46 @@ from cymunk import Vec2d
 
 from animations import MeshAnimator, setup_step
 from misc.exceptions import InsufficientData
-
+from misc.util import not_none_keywords
 from .creature import Creature
 
 # TODO PhysicsVisual baseclass?
 class TentacleBodyPart(object):
-    """Gooey mass of tentacles modeled by springs between all vertices"""
+    """Creates a Mesh that behaves as gooey mass by creating physical springs between all vertices
+    and stiffer center skeleton"""
 
-    def __init__(self, jelly):
-        "tentacles.steps.__setup__"
+    @not_none_keywords('creature', 'image_filepath', 'vertices', 'indices')
+    def __init__(self, creature=None, image_filepath=None, mesh_mode='triangle_fan',
+                 vertices=None, indices=None,
+                 mass=100, stiffness=10, damping=5):
 
-        self.jelly = jelly
 
-        try:
-            anim = jelly.store['tentacles']
-            anim_setup = anim['steps']['__setup__']
-        except KeyError as ex:
-            raise InsufficientData(repr(ex))
+        if len(vertices < 3):
+            raise InsufficientData('Less than 3 vertices')
+        if len(indices < 3):
+            raise InsufficientData('Less than 3 indices')
+
+        if mesh_mode != 'triangle_fan':
+            raise ValueError('Other mesh_modes not supported; need to calc centroid in other modes')
+
+        # FIXME minimize assupmtions about what binding to
+        self.jelly = creature
+
+        creature_phy_body = creature.phy_body
 
         # backwards unit vector
-        backwards_vec = jelly.phy_body.rotation_vector.rotated_degrees(180)
-        jelly_pos = Vec2d(jelly.pos)
+        backwards_vec = creature_phy_body.rotation_vector.rotated_degrees(180)
+        jelly_pos = Vec2d(creature.pos)
         # +  * (2 * width + jelly.phy_shape.radius / 2.0)
 
-        canvas_after = jelly.canvas.after
+        canvas_after = creature.canvas.after
 
         stiffness = 10
         damping = 5
-        jelly_radius = jelly.phy_shape.radius
+        creature_radius = creature.phy_shape.radius  # FIXME assumes Circle shape
 
         # Mass
-        tentacles_total_mass = 0.5 * jelly.phy_body.mass
+        tentacles_total_mass = 0.5 * creature_phy_body.mass
         center_chain_mass = 0.5 * tentacles_total_mass
         outer_chain_mass = tentacles_total_mass - center_chain_mass
 
@@ -55,15 +64,9 @@ class TentacleBodyPart(object):
         # FIXME Tentacles vertices don't need all this encoding
         positions = []
 
-        vertices = anim_setup['vertices']
-        if len(vertices) < 3:
-            raise InsufficientData('Only %d tentacle vertices'%len(vertices))
-
         # Mesh vertices translated to correct world positions relative to Jelly
         # will set Mesh.vertices at end
         translated_vertices = []
-
-
 
         # Start at 4 to skip centroid
         tentacles_offset = backwards_vec * -1.0
@@ -72,7 +75,7 @@ class TentacleBodyPart(object):
             # These are in Image coordinates
             # Can't just scale and rotate because it's attached to the physics system
 
-            xy = jelly.texture_xy_to_world(vertices[i], vertices[i+1]) + tentacles_offset
+            xy = creature.texture_xy_to_world(vertices[i], vertices[i+1]) + tentacles_offset
             positions.append(xy)
             translated_vertices.extend((xy.x, xy.y, vertices[i+2], vertices[i+3]))
 
@@ -82,8 +85,8 @@ class TentacleBodyPart(object):
         closest_stiffness = 1000
         closest_damping = 500
         # Left Offset
-        offset = (0, jelly_radius*0.5)
-        offset_world_vec = Vec2d(offset).rotated_degrees(jelly.angle) + jelly_pos
+        offset = (0, creature_radius*0.5)
+        offset_world_vec = Vec2d(offset).rotated_degrees(creature.angle) + jelly_pos
         # with canvas_after:
         #     Rectangle(pos=(offset_world_vec.x, offset_world_vec.y), size=(10, 10))
         # offset_vec = jelly_pos + backwards_vec.perpendicular() * (0.5 * jelly_radius)
@@ -92,16 +95,16 @@ class TentacleBodyPart(object):
         closest = min(outer_chain, key=lambda x: x[0].body.position.get_distance(offset_world_vec))
         closest_body = closest[0].body
         rest_length = offset_world_vec.get_distance(closest_body.position)
-        spring = phy.DampedSpring(jelly.phy_body, closest_body, offset, (0, 0),
+        spring = phy.DampedSpring(creature_phy_body, closest_body, offset, (0, 0),
                                   rest_length, closest_stiffness, closest_damping)
         closest[2].append(spring)
 
         # FIXME Setup groups some other way, Need to detect points that start inside
-        closest[0].group = jelly.phy_group_num
+        closest[0].group = creature.phy_group_num
 
         # Right Offset
-        offset = (0, -jelly_radius*0.5)
-        offset_world_vec = Vec2d(offset).rotated_degrees(jelly.angle) + jelly_pos
+        offset = (0, -creature_radius*0.5)
+        offset_world_vec = Vec2d(offset).rotated_degrees(creature.angle) + jelly_pos
         # with canvas_after:
         #     Rectangle(pos=(offset_world_vec.x, offset_world_vec.y), size=(10, 10))
         # offset_vec = jelly_pos + backwards_vec.perpendicular() * (0.5 * jelly_radius)
@@ -110,19 +113,19 @@ class TentacleBodyPart(object):
         closest = min(outer_chain, key=lambda x: x[0].body.position.get_distance(offset_world_vec))
         closest_body = closest[0].body
         rest_length = offset_world_vec.get_distance(closest_body.position)
-        spring = phy.DampedSpring(jelly.phy_body, closest_body, offset, (0, 0),
+        spring = phy.DampedSpring(creature_phy_body, closest_body, offset, (0, 0),
                                   rest_length, closest_stiffness, closest_damping)
         closest[2].append(spring)
 
         # FIXME Setup groups some other way, Need to detect points that start inside
-        closest[0].group = jelly.phy_group_num
+        closest[0].group = creature.phy_group_num
 
 
         ### Center Chain ###
         canvas_after.add(Color(rgba=(0, 0, 1.0, 0.3)))
         radius = 12
         dist_apart = 3 * radius  # rest length
-        start = jelly_pos + backwards_vec * (jelly.phy_shape.radius + 20)
+        start = jelly_pos + backwards_vec * (creature.phy_shape.radius + 20)
         positions = [start + backwards_vec * (dist_apart * n) for n in range(2)]
 
 
@@ -131,8 +134,8 @@ class TentacleBodyPart(object):
                                                               stiffness=stiffness * 10, damping=damping * 10)
 
         first = center_chain[0]
-        rest_length = jelly.phy_body.position.get_distance(first[0].body.position)
-        spring = phy.DampedSpring(jelly.phy_body, first[0].body, (0, 0), (0, 0),
+        rest_length = creature_phy_body.position.get_distance(first[0].body.position)
+        spring = phy.DampedSpring(creature_phy_body, first[0].body, (0, 0), (0, 0),
                                   rest_length, stiffness, damping)
         first[2].append(spring)
 
@@ -144,10 +147,6 @@ class TentacleBodyPart(object):
 
         # Setup Mesh
 
-        mesh_mode = str(anim['mesh_mode'])
-        if mesh_mode != 'triangle_fan':
-            raise ValueError('Need to calc centroid in other modes')
-
 
         # triangle_fan needs centroid
         # TODO Use centroid? Make centroid it's own massive point? single point in center_chain?
@@ -156,10 +155,9 @@ class TentacleBodyPart(object):
         # Prepend centroid vertices list
         translated_vertices = [cent_pos.x, cent_pos.y, vertices[2], vertices[3]] + translated_vertices
 
-        with jelly.canvas.before:
+        with creature.canvas.before:
             Color(rgba=(1.0, 1.0, 1.0, 1.0))
-            img = CoreImage(anim['image_filepath'])
-            indices = anim['indices']
+            img = CoreImage(image_filepath)
             self.mesh = mesh = Mesh(mode=mesh_mode, texture=img.texture, indices=indices,
                                     vertices=translated_vertices)
 
@@ -187,6 +185,8 @@ class TentacleBodyPart(object):
     def _create_chain(self, positions, canvas, mass=1, radius=10, loop_around=False, stiffness=50, damping=15):
 
         prev = None
+
+        assert len(positions) > 0
 
         mypos = self.jelly.phy_body.position
         farthest_dist = max(pos.get_distance(mypos) for pos in positions)
@@ -308,31 +308,35 @@ class TentacleBodyPart(object):
 
 
 
-class Jelly(Creature):
+class JellyBell(Creature):
+    """An animated Jelly bell Creature that uses a MeshAnimator to animate between an open
+    and closed position. Applies physics forces in proportion with Bell animation.
+    Also induces drag."""
+    # Ideally Animation would be more abstract
+    # However, this game focuses only on Jellies
+    # So it's much easier to hard-code the knowledge of bell pulses, tentacle drift, etc.
 
-    def __init__(self, **kwargs):
+    @not_none_keywords('image_filepath', 'mesh_animator')
+    def __init__(self, image_filepath=None, mesh_animator=None, **kwargs):
+        """Creates Mesh using image_filepath and binds MeshAnimator to it
 
-        self._bell_animator = None
+        image_filepath"""
+
+        self.image_filepath = image_filepath
+        self.mesh_animator = mesh_animator
+
         self._prev_bell_vertical_fraction = 0.0
         self.bell_push_dir = True  # whether Bell is pulsing as to push jelly
         # indices of the Bell Mesh that can be the farthest horizontally to the right
         # (used to determine the bell_diameter dynamically)
         self._rightmost_vertices_for_step = {}
 
-        # Ideally Animation would be more abstract
-        # However, this game focuses only on Jellies
-        # So it's much easier to hard-code the knowledge of bell pulses, tentacle drift, etc.
-        self.store = kwargs.get('jelly_store')
-        self.jelly_id = self.store['info']['id']
+        super(JellyBell, self).__init__(**kwargs)
 
-        super(Jelly, self).__init__(**kwargs)
+        mesh_animator.bind(vertical_fraction=self.on_bell_vertical_fraction, step=self.on_bell_animstep)
+        mesh_animator.start_animation()
 
         # super called draw_creature
-
-        try:
-            self.body_parts.append(TentacleBodyPart(self))
-        except KeyError:
-            Logger.info('%s has no tentacles information', self.jelly_id)
 
     def texture_xy_to_world(self, x, y):
         # position + adjustment + x|y
@@ -345,18 +349,14 @@ class Jelly(Creature):
         if hasattr(self, 'bell_mesh'):
             raise AssertionError('Already called draw_creature!')
 
-        # called with canvas
-        store = self.store
-
         # Draw Jelly Bell
-        anim = store['bell_animation']
-        mesh_mode = str(anim['mesh_mode'])
-        if mesh_mode != 'triangle_fan':
-            raise ValueError('Need to calc centroid in other modes')
+
+        a = self.mesh_animator
+        verts = a.initial_vertices
 
         # first vertex to be used for centroid
-        # centroid = anim['centroid']  # FUTURE: define centroid in data?
-        verts = anim['steps'][setup_step]['vertices']
+        if a.mesh_mode != 'triangle_fan':
+            raise AssertionError('Need centroid to recenter JellyBell')
 
         # Draw centered at pos for Scale/Rotation to work correctly
         PushMatrix()
@@ -368,27 +368,21 @@ class Jelly(Creature):
         t = Translate()
         t.xy = adjustment
 
-        img = CoreImage(anim['image_filepath'])
-        self.bell_mesh = mesh = Mesh(mode=mesh_mode, texture=img.texture)
-        a = MeshAnimator.from_animation_data(anim)
-        self._bell_animator = a
+        img = CoreImage(self.image_filepath)
+        self.bell_mesh = mesh = Mesh(texture=img.texture)
         a.mesh = mesh
-        a.bind(vertical_fraction=self.on_bell_vertical_fraction, step=self.on_bell_animstep)
-        a.start_animation()
 
         PopMatrix()
-
 
         # Visualize physics shape
         # size will be set to radius in calc_bell_radius()
         if self.debug_visuals:
             Color(rgba=(0.1, 0.4, 0.5, 0.9))
             self._phys_shape_ellipse = Line(ellipse=(-5, -5, 10, 10))
-                # Ellipse(pos=(-5, -5), size=(10, 10))
+            # Ellipse(pos=(-5, -5), size=(10, 10))
 
         # Update Physics shape
         self.calc_bell_radius()
-
 
     def calc_bell_radius(self):
         """Get the current bell radius
@@ -433,7 +427,7 @@ class Jelly(Creature):
     def on_bell_animstep(self, meshanim, step):
         self._prev_bell_vertical_fraction = 0.0
         # Moving toward closed_bell is pushing
-        self.bell_push_dir = self._bell_animator.step_names[step] == 'closed_bell'
+        self.bell_push_dir = self.mesh_animator.step_names[step] == 'closed_bell'
 
 
     def on_bell_vertical_fraction(self, meshanim, frac):
@@ -454,14 +448,8 @@ class Jelly(Creature):
         # Lots of little impulses? Or use forces?
         # impulse i think, since could rotate and would need to reset_forces and calc new each time anyway
 
-        # TODO forces when going backwords? yes? adjust by fraction
-        # hz_fraction = self._bell_animator.horizontal_fraction
-
-        #self.phy_body.activate()
-        # power = (5000 if self.bell_push_dir else -500) * v_diff
-        # impulse = Vec2d(0, 1) * power
         push_factor = 0.2
-        power = self.cross_area * v_diff * (push_factor if self.bell_push_dir else -0.8*push_factor)
+        power = self.cross_area * v_diff * (push_factor if self.bell_push_dir else -0.8 * push_factor)
 
 
         # Apply impulse off-center to rotate

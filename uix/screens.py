@@ -15,9 +15,10 @@ from kivy.animation import Animation
 import cymunk as phy
 
 from visuals.animations import setup_step
-from visuals.creatures.jelly import Jelly
+from visuals.creatures.jelly import JellyBell
 from uix.elements import JellySelectButton
 from uix.animation_constructors import AnimationConstructor
+from data.state_storage import construct_creature
 
 from data.state_storage import load_jelly_storage, load_all_jellies, delete_jelly
 
@@ -79,7 +80,7 @@ class JellyEnvironmentScreen(Screen):
                 # pos = self.width/2.0, self.height/2.0
                 # angle = random.randint(-180, 180)
                 angle = 90
-                j = Jelly(jelly_store=store, pos=pos, angle=angle, phy_group_num=jelly_num, parent=self)
+                j = construct_creature(store, pos=pos, angle=angle, phy_group_num=jelly_num, parent=self)
                 jelly_num += 1
                 #j.speed = random.uniform(0, 10.0)
                 # j.scale = random.uniform(0.75, 2.0)
@@ -88,7 +89,7 @@ class JellyEnvironmentScreen(Screen):
                 # j.change_angle(0.0)
                 # j.move(self.width/2., self.height/2.)
                 # j.move(random.randint(110, self.width), random.randint(110, self.height))
-                print("Jelly pos=%s, angle=%s"%(j.pos, j.angle))
+                # print("Jelly pos=%s, angle=%s"%(j.pos, j.angle))
                 # self.add_widget(j)
                 self.canvas.add(j.canvas)  # TODO is this right?
                 self.creatures.append(j)
@@ -105,7 +106,7 @@ class JellyEnvironmentScreen(Screen):
         # TODO Move angle changing code to Jelly
         for c in self.creatures:
             angle = c.angle + random.randint(-180, 180)
-            print('current angle=%f  orienting %f deg'%(c.angle, angle))
+            print('change_behavior: current angle=%f  orienting %f deg'%(c.angle, angle))
             c.orient(angle)
 
 
@@ -180,6 +181,8 @@ class JellyAnimationConstructorScreen(AppScreen):
 
         super(JellyAnimationConstructorScreen, self).__init__(**kwargs)
 
+        self.image_filepath = store['info']['image_filepath']  # TODO pass this into constructor?
+
         anim_const = self.ids.animation_constructor
         if self.animation_name not in store:
             # In future may have different images for creature, and want to store all needed info under animation data
@@ -213,16 +216,36 @@ class JellyAnimationConstructorScreen(AppScreen):
 
         self.ids.animation_constructor.animation_step = step
 
-
     def on_leave(self, *args):
         # After screen leaving animation ended
         # save animation data async
         # animation_name could change in future?
         ac = self.ids.animation_constructor
+        store = self.store
+
+        # TODO Is this the appropriate place to hard-code this?
+        # Probably refactor body part constructor GUI in reef game
+
+        if self.animation_name == 'bell_animation':
+            # Create constructor JSON
+
+            store['jelly_bell'] = {'visuals.creatures.jelly.JellyBell':
+                        {'image_filepath': self.image_filepath,
+                        'mesh_animator': ac.create_mesh_animator_construction()}}
+
+            Logger.debug('{}: saving "jelly_bell" {}'.format(self.__class__.__name__, store['jelly_bell']))
+
+            # Verify constructor_calls starts with 'jelly_bell'
+            constrs = store['info']['creature_constructors']
+            if not constrs or constrs[0] != 'jelly_bell':
+                constrs.insert(0, 'jelly_bell')
+
+        # FIXME remove
         data = ac.get_animation_data()
+
         Logger.debug('JellyAnimationConstructorScreen: saving animation %s', data)
-        self.store[self.animation_name] = data
-        self.store.store_sync()
+        store[self.animation_name] = data
+        store.store_sync()
 
     def get_state(self):
         d = super(JellyAnimationConstructorScreen, self).get_state()

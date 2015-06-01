@@ -15,8 +15,9 @@ from kivy.clock import Clock
 
 import cymunk as phy
 
-from visuals.creatures.jelly import Jelly
+from visuals.creatures.jelly import JellyBell
 from misc.exceptions import InsufficientData
+from data.state_storage import construct_creature
 
 class CreatureWidget(Widget):
     """Contains and centers a Creature"""
@@ -68,21 +69,21 @@ class JellySelectButton(Button):
         super(JellySelectButton, self).__init__(**kwargs)
 
         try:
-            # Create moving Jelly
-            angle = 90
-            j = Jelly(jelly_store=jelly_store, angle=angle, phy_group_num=1)
+            # Create moving Jelly within button
+            j = construct_creature(jelly_store)
+            j.angle = 90
+            j.phy_group_num = 1
             self.jelly = j
             self.ids.creature_widget.set_creature(j)
 
             # Loaded successfully, remove image
             # self.remove_widget(self.ids.image)
 
-
         except InsufficientData as ex:
             Logger.info("Not enough data to preview Jelly %s: %s", self.jelly_id, ex.message)
 
         except:
-            Logger.exception("Problem previewing Jelly %s", self.jelly_id)
+            Logger.exception("Problem previewing Jelly %s within button", self.jelly_id)
             raise
 
     def on_release(self):
