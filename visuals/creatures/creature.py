@@ -22,8 +22,8 @@ from kivy.clock import Clock
 import cymunk as phy
 from cymunk import Vec2d
 
-from drawn_visual import ControlPoint
-from animations import MeshAnimator, setup_step
+from ..drawn_visual import ControlPoint
+from ..animations import MeshAnimator, setup_step
 from misc.exceptions import InsufficientData
 
 

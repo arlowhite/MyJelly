@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 __author__ = 'awhite'
 __version__ = '0.1'
 

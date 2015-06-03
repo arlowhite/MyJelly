@@ -15,7 +15,7 @@ from kivy.clock import Clock
 import cymunk as phy
 from cymunk import Vec2d
 
-from animations import MeshAnimator, setup_step
+from visuals.animations import MeshAnimator, setup_step
 from misc.exceptions import InsufficientData
 from misc.util import not_none_keywords
 from .creature import Creature
