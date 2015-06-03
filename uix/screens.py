@@ -243,28 +243,12 @@ class JellyAnimationConstructorScreen(AppScreen):
         # Probably refactor body part constructor GUI in reef game
         creature_constructors = store['info']['creature_constructors']
 
-        assert part_name != 'bell_animation'  # old name
+        assert part_name != 'bell_animation'  # FIXME remove this old name check
+        # Current design expects part name to be added to creature_constructors first
+        # (Indicating new part is avaliable for editing by user)
+        assert part_name in creature_constructors
         constructor_class = constructor_class_for_part[part_name]
         store[part_name] = constructor_class.create_construction_structure(self)
-
-        # TODO think about best way to manage creature_constructors
-        # Adjust info.creature_constructors
-        if part_name == 'jelly_bell':
-            # Verify constructor_calls starts with 'jelly_bell'
-            if not creature_constructors or creature_constructors[0] != part_name:
-                creature_constructors.insert(0, part_name)
-
-        elif part_name == 'tentacles':
-            # FIXME JellyBell must be created first...enforce in GUI
-            # Because first is assumed to subclass Creature
-            if 'jelly_bell' not in creature_constructors:
-                raise AssertionError('JellyBell needed first')
-
-            if part_name not in creature_constructors:
-                creature_constructors.append(part_name)
-
-        else:
-            raise NotImplementedError()
 
         Logger.debug('{}: saving "{}" {}'
                      .format(self.__class__.__name__, part_name, store[part_name]))
