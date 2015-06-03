@@ -32,6 +32,8 @@ class MeshAnimator(EventDispatcher):
                  '_animation', '_start_animation_lambda',
                  '_previous_step_vertices', '_next_step_vertices')
 
+    class_path = 'visuals.animations.MeshAnimator'
+
     # variables that are animated and used to adjust vertices
     horizontal_fraction = NumericProperty(0.0)
     vertical_fraction = NumericProperty(0.0)

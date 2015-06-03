@@ -1,5 +1,8 @@
 __author__ = 'awhite'
 
+# Body parts that make up Jelly Creature
+# DO NOT Rename or Move any classes from here as the class path is serialized
+
 import random
 from math import cos, sin, radians, degrees, pi
 
@@ -18,21 +21,51 @@ from misc.util import not_none_keywords
 from .creature import Creature
 
 # TODO PhysicsVisual baseclass?
-class TentacleBodyPart(object):
+class GooeyBodyPart(object):
     """Creates a Mesh that behaves as gooey mass by creating physical springs between all vertices
     and stiffer center skeleton"""
+
+    class_path = 'visuals.creatures.jelly.GooeyBodyPart'
+
+    @staticmethod
+    def create_construction_structure(anim_constr_screen):
+        anim_constr = anim_constr_screen.ids.animation_constructor
+        vertices, indices = anim_constr.calc_mesh_vertices(update_mesh=False)
+
+        return {GooeyBodyPart.class_path:
+                {
+                    'image_filepath': anim_constr.image_filepath,
+                    'mesh_mode': anim_constr.mesh_mode,
+                    'vertices': vertices, 'indices': indices
+                }
+            }
+
+    @staticmethod
+    def setup_anim_constr(anim_constr_screen, structure):
+        """Modify the AnimationConstructor to represent the state stored in the
+        structure (as returned from create_construction_structure)
+        """
+
+        anim_constr = anim_constr_screen.ids.animation_constructor
+        # with disables animation while changing data
+        with anim_constr:
+            data = structure[GooeyBodyPart.class_path]
+            anim_constr_screen.image_filepath = data['image_filepath']
+            anim_constr.image_filepath = data['image_filepath']
+            anim_constr.mesh_mode = data['mesh_mode']
+            anim_constr.setup_control_points(data['vertices'])
 
     @not_none_keywords('creature', 'image_filepath', 'vertices', 'indices')
     def __init__(self, creature=None, image_filepath=None, mesh_mode='triangle_fan',
                  vertices=None, indices=None,
                  mass=100, stiffness=10, damping=5):
 
-
-        if len(vertices < 3):
+        if len(vertices) < 3:
             raise InsufficientData('Less than 3 vertices')
-        if len(indices < 3):
+        if len(indices) < 3:
             raise InsufficientData('Less than 3 indices')
 
+        mesh_mode = str(mesh_mode)  # Mesh.mode does not support unicode
         if mesh_mode != 'triangle_fan':
             raise ValueError('Other mesh_modes not supported; need to calc centroid in other modes')
 
@@ -160,6 +193,8 @@ class TentacleBodyPart(object):
             img = CoreImage(image_filepath)
             self.mesh = mesh = Mesh(mode=mesh_mode, texture=img.texture, indices=indices,
                                     vertices=translated_vertices)
+
+        creature.add_body_part(self)
 
 
     def _cross_link(self, chain1, chain2, stiffness=20, damping=10):
@@ -306,8 +341,6 @@ class TentacleBodyPart(object):
         # Force visual update
         self.update()
 
-
-
 class JellyBell(Creature):
     """An animated Jelly bell Creature that uses a MeshAnimator to animate between an open
     and closed position. Applies physics forces in proportion with Bell animation.
@@ -315,6 +348,8 @@ class JellyBell(Creature):
     # Ideally Animation would be more abstract
     # However, this game focuses only on Jellies
     # So it's much easier to hard-code the knowledge of bell pulses, tentacle drift, etc.
+
+    class_path = 'visuals.creatures.jelly.JellyBell'
 
     @not_none_keywords('image_filepath', 'mesh_animator')
     def __init__(self, image_filepath=None, mesh_animator=None, **kwargs):
@@ -337,6 +372,43 @@ class JellyBell(Creature):
         mesh_animator.start_animation()
 
         # super called draw_creature
+
+    @staticmethod
+    # FIXME verify screen or not, check calls
+    def create_construction_structure(anim_constr_screen):
+        """Creates construction structure see: construct_value()
+        from AnimationConstructor state.
+        """
+        anim_constr = anim_constr_screen.ids.animation_constructor
+
+        return {JellyBell.class_path:
+                    {'image_filepath': anim_constr_screen.image_filepath,
+                    'mesh_animator': anim_constr.create_mesh_animator_construction()}}
+
+    @staticmethod
+    def setup_anim_constr(anim_constr_screen, structure):
+        """Modify the AnimationConstructor to represent the state stored in the
+        structure (as returned from create_construction_structure)
+        """
+
+        # This seems like the best way to keep deserialization/serialization code
+        # together and associated with the Class.
+        # Could construct the value and read from JellyBell, MeshAnimator,
+        # but this is just as tedious and wasteful
+
+        anim_constr = anim_constr_screen.ids.animation_constructor
+        # with disables animation while changing data
+        with anim_constr:
+            data = structure[JellyBell.class_path]
+            anim_constr_screen.image_filepath = data['image_filepath']
+            anim_constr.image_filepath = data['image_filepath']
+            mesh_animator_structure = data['mesh_animator'][MeshAnimator.class_path]
+            anim_constr.mesh_mode = mesh_animator_structure['mesh_mode']
+            anim_constr.setup_control_points(mesh_animator_structure['initial_vertices'])
+
+            for step_structure in mesh_animator_structure['steps']:
+                anim_constr.add_step(step_structure['step_name'], step_structure['vertices'])
+
 
     def texture_xy_to_world(self, x, y):
         # position + adjustment + x|y

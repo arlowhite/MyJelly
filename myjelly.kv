@@ -101,13 +101,14 @@
         BoxLayout:
             orientation: 'vertical'
 
+# TODO generate Buttons based on creature_constructors rather than hardcoding here
             Button:
                 text: 'Animate Bell'
-                on_press: app.open_screen('JellyAnimationConstructorScreen', {'jelly_id': root.jelly_id, 'animation_name':'bell_animation'})
+                on_press: app.open_screen('JellyAnimationConstructorScreen', {'jelly_id': root.jelly_id, 'part_name':'jelly_bell'})
 
             Button:
                 text: 'Outline Tentacles'
-                on_press: app.open_screen('JellyAnimationConstructorScreen', {'jelly_id': root.jelly_id, 'animation_name':'tentacles'})
+                on_press: app.open_screen('JellyAnimationConstructorScreen', {'jelly_id': root.jelly_id, 'part_name':'tentacles'})
 
             Button:
                 text: 'Tweaks'
@@ -179,7 +180,6 @@
 
                 AnimationConstructor:
                     id: animation_constructor
-                    animation_steps_order: ('open_bell', 'closed_bell')
 
                     # Unlock/Lock Scatter
                     move_resize: move_resize_switch.active

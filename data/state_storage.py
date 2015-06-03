@@ -12,6 +12,8 @@ from kivy.logger import Logger
 from datetime import datetime
 
 import constructable
+
+# Mapping of class paths to classes allowed to be constructed from JSON
 constructable_members = {}
 for member in inspect.getmembers(constructable):
     if member[0].startswith('_'):
@@ -97,7 +99,9 @@ def load_jelly_storage(jelly_id):
             raise
 
         if new_store:
-            store['info'] = {'created_datetime': datetime.utcnow().isoformat()}
+            store['info'] = {'created_datetime': datetime.utcnow().isoformat(),
+                             'id': jelly_id,
+                             'creature_constructors': []}
 
         jelly_stores[jelly_id] = store
 
@@ -154,7 +158,7 @@ def construct_value(object, **merge_kwargs):
 
     if isinstance(object, dict):
         if len(object) != 1:
-            raise AssertionError('Expect just one key that is a Constructor module path')
+            raise AssertionError('Expect just one key that is a Constructor module path, given {}'.format(object.keys()))
 
         constructor_path, arguments_dict = object.items()[0]
         Constructor = constructable_members[constructor_path]
@@ -193,12 +197,13 @@ def construct_creature(store, **merge_kwargs):
     merge_kwargs.update({'creature_id': creature_id})
     creature = construct_value(store[constructor_names[0]], **merge_kwargs)
 
-    # for name in constructor_names[1:]:
-    #     constructor_module_path = store[name]
-    #
-    #     class_path = store[name]
-        # __import__(Class)
-        # Class = sys.modules[class_path]
+    creature_parts = store.keys()
+    for name in constructor_names[1:]:
+        if name in creature_parts:
+            construct_value(store[name], creature=creature)
+        else:
+            Logger.debug('Creature %s missing part structure "%s"', creature_id, name)
+
 
     return creature
 

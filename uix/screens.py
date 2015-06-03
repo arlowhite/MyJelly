@@ -15,12 +15,17 @@ from kivy.animation import Animation
 import cymunk as phy
 
 from visuals.animations import setup_step
-from visuals.creatures.jelly import JellyBell
+from visuals.creatures.jelly import JellyBell, GooeyBodyPart
 from uix.elements import JellySelectButton
 from uix.animation_constructors import AnimationConstructor
-from data.state_storage import construct_creature
+from data.state_storage import load_jelly_storage, load_all_jellies, delete_jelly, \
+    construct_creature, constructable_members
 
-from data.state_storage import load_jelly_storage, load_all_jellies, delete_jelly
+
+constructor_class_for_part = {
+    'jelly_bell': JellyBell,
+    'tentacles': GooeyBodyPart
+}
 
 class AppScreen(Screen):
 
@@ -162,9 +167,9 @@ class JellyDesignScreen(AppScreen):
 
 
 class JellyAnimationConstructorScreen(AppScreen):
-    """Modify the Mesh animation for the selected Jelly.
-    create a new screen instead of setting jelly_id or animation_name for now"""
-    state_attributes = ('jelly_id', 'animation_step', 'animation_name')
+    """Screen that for editing the Control Points of a Mesh.
+    create a new screen instead of setting jelly_id or part_name for now"""
+    state_attributes = ('jelly_id', 'animation_step', 'part_name')
 
     animation_step = StringProperty(setup_step)
 
@@ -173,7 +178,8 @@ class JellyAnimationConstructorScreen(AppScreen):
             # raise ValueError('Must specify jelly_id')
         self.jelly_id = kwargs['jelly_id']
         # The animation name to store the data under in the store, may be configured in future
-        self.animation_name = kwargs['animation_name']
+        self.part_name = kwargs['part_name']
+        assert self.part_name != 'bell_animation'  # FIXME remove old name check, 2nd below
         self.animation_step = kwargs.get('animation_step', setup_step)
 
         store = load_jelly_storage(self.jelly_id)
@@ -184,11 +190,21 @@ class JellyAnimationConstructorScreen(AppScreen):
         self.image_filepath = store['info']['image_filepath']  # TODO pass this into constructor?
 
         anim_const = self.ids.animation_constructor
-        if self.animation_name not in store:
-            # In future may have different images for creature, and want to store all needed info under animation data
-            store[self.animation_name] = {'image_filepath': store['info']['image_filepath']}
 
-        anim_const.set_animation_data(store[self.animation_name], animation_step=self.animation_step)
+        # Part classes know how to setup AnimationConstructor from JSON structure
+        # Determine the part class and call setup_anim_constr()
+        part_name = self.part_name
+        try:
+            part_structure = store[part_name]
+            class_path = part_structure.keys()[0]
+            constructable_members[class_path].setup_anim_constr(self, part_structure)
+
+        except KeyError:
+            # part was never edited before
+            anim_const.image_filepath = self.image_filepath
+            pass
+
+        # Restore AnimationConstructor GUI state
         # FIXME Want to remember scale and pos even when opening Jelly fresh?
         try:
             anim_const.animate_changes = False
@@ -219,32 +235,40 @@ class JellyAnimationConstructorScreen(AppScreen):
     def on_leave(self, *args):
         # After screen leaving animation ended
         # save animation data async
-        # animation_name could change in future?
         ac = self.ids.animation_constructor
         store = self.store
+        part_name = self.part_name
 
         # TODO Is this the appropriate place to hard-code this?
         # Probably refactor body part constructor GUI in reef game
+        creature_constructors = store['info']['creature_constructors']
 
-        if self.animation_name == 'bell_animation':
-            # Create constructor JSON
+        assert part_name != 'bell_animation'  # old name
+        constructor_class = constructor_class_for_part[part_name]
+        store[part_name] = constructor_class.create_construction_structure(self)
 
-            store['jelly_bell'] = {'visuals.creatures.jelly.JellyBell':
-                        {'image_filepath': self.image_filepath,
-                        'mesh_animator': ac.create_mesh_animator_construction()}}
-
-            Logger.debug('{}: saving "jelly_bell" {}'.format(self.__class__.__name__, store['jelly_bell']))
-
+        # TODO think about best way to manage creature_constructors
+        # Adjust info.creature_constructors
+        if part_name == 'jelly_bell':
             # Verify constructor_calls starts with 'jelly_bell'
-            constrs = store['info']['creature_constructors']
-            if not constrs or constrs[0] != 'jelly_bell':
-                constrs.insert(0, 'jelly_bell')
+            if not creature_constructors or creature_constructors[0] != part_name:
+                creature_constructors.insert(0, part_name)
 
-        # FIXME remove
-        data = ac.get_animation_data()
+        elif part_name == 'tentacles':
+            # FIXME JellyBell must be created first...enforce in GUI
+            # Because first is assumed to subclass Creature
+            if 'jelly_bell' not in creature_constructors:
+                raise AssertionError('JellyBell needed first')
 
-        Logger.debug('JellyAnimationConstructorScreen: saving animation %s', data)
-        store[self.animation_name] = data
+            if part_name not in creature_constructors:
+                creature_constructors.append(part_name)
+
+        else:
+            raise NotImplementedError()
+
+        Logger.debug('{}: saving "{}" {}'
+                     .format(self.__class__.__name__, part_name, store[part_name]))
+
         store.store_sync()
 
     def get_state(self):
@@ -300,7 +324,12 @@ class NewJellyScreen(Screen):
         # TODO check if image file
         jelly_id = uuid.uuid4().hex
         jelly = load_jelly_storage(jelly_id)
-        jelly.put('info', id=jelly_id, image_filepath = filepath)
+        jelly.put('info', image_filepath = filepath)
+
+        # TODO This defines the parts available in the menu
+        # In the future user might change this list through the GUI to define optional parts
+        jelly['info']['creature_constructors'].extend(('jelly_bell', 'tentacles'))
+
         jelly.store_sync()  # As soon as image is saved, save jelly state
 
         App.get_running_app().open_screen('JellyDesignScreen', dict(jelly_id=jelly_id))

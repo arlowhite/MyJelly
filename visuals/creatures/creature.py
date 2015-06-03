@@ -76,6 +76,8 @@ class Creature(object):
         mass = 1e5  # mass of the body i.e. linear moving inertia
         moment = 1e5  # moment of inertia, i.e. rotation inertia
         mass = 100
+
+        self.phy_space = None
         self.phy_body = body = phy.Body(mass, moment)
         self.phy_body.velocity_limit = 1000
 
@@ -145,6 +147,8 @@ class Creature(object):
         self.phy_body.angle = newangle
         self._rotate.angle = newangle - 90
 
+        # TODO Need to rotate body parts about center as well
+
     @property
     def scale(self):
         return self._scale.x
@@ -154,9 +158,16 @@ class Creature(object):
         # TODO what does z do for 2D?
         self._scale.xyz = (scale, scale, 1.0)
 
+    def add_body_part(self, part):
+        self.body_parts.append(part)
+        if self.phy_space:
+            part.bind_physics_space(self.phy_space)
 
     def bind_physics_space(self, space):
-        '''Attach to the given physics space'''
+        """Attach to the given physics space"""
+        assert self.phy_space is None  # TODO Need to remove from old space?
+
+        self.phy_space = space
         space.add(self.phy_body, self.phy_shape)  # add physical objects to simulated space
         #self.phy_body.activate()
 

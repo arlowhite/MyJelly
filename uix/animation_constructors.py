@@ -17,21 +17,22 @@ __author__ = 'awhite'
 
 
 class AnimationConstructor(Scatter):
-    """Visual animation constructor.
+    """A surface on which to layout ControlPoints and preview Mesh animations.
     Shows a single Mesh texture in the center.
     Allows manipulation of ControlPoints within its size.
 
     """
 
     control_points = ListProperty([])
-    animation_step = StringProperty(setup_step)
+    animation_step = StringProperty(setup_step)  # The current step being displayed
     # Image can be moved and zoomed by user to allow more precise ControlPoint placement.
     move_resize = BooleanProperty(False)
-    animating = BooleanProperty(False)  # animating controlpoints
-    animate_changes = BooleanProperty(True)
+    animating = BooleanProperty(False)  # animating controlpoints currently
+    animate_changes = BooleanProperty(True)  # whether to animate changes to state
 
     control_points_disabled = BooleanProperty(False)
     control_points_opacity = BoundedNumericProperty(1.0, min=0.0, max=1.0)
+    image_filepath = StringProperty()
     image_opacity = BoundedNumericProperty(1.0, min=0.0, max=1.0)
     mesh_mode = StringProperty('triangle_fan')
 
@@ -44,7 +45,8 @@ class AnimationConstructor(Scatter):
         self.mesh = None
         # FIXME test state restore from different animation_step, trigger on_animation, check mesh_attched on CPs
         self.animation_step = setup_step
-        self.steps = kwargs.get('steps', [self.animation_step]) # all steps
+        self.animation_steps_order = []
+
         self._previous_step = self.animation_step
         self.faded_image_opacity = 0.5
         self._moved_control_point_trigger = Clock.create_trigger(self.on_control_point_moved)
@@ -64,110 +66,74 @@ class AnimationConstructor(Scatter):
     def on_mesh_mode(self, _, mode):
         self.mesh.mode = str(mode)
 
-    def set_animation_data(self, data, animation_step=setup_step):
-        """Resets AnimationConstructor, displays image centered"""
-        # data is a dictionary of image_filepath, vertices[], indices[]
-        # TODO code that creates MeshAnimator from this should be refactored
-        # This should update jelly_store; other code should read it and create the MeshAnimation
-
-        # TODO Work on reseting state? Just create new instead?
-
-        Logger.debug('animation_data set')
+    def __enter__(self):
+        """with statement disables animations"""
         self.animate_changes = False
-        try:
-            # self has default size at this point, sizing must be done in on_size
+        return self
 
-            with self.canvas:
-                # mipmap=True changes tex_coords and screws up calculations
-                # TODO Research mipmap more
-                cimage = CoreImage(data['image_filepath'], mipmap=False)
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # FIXME Old code triggered on_animation_step after data set
+        # Setting animation_step will move the ControlPoints for us and figure out mesh attachment
+        # need_dispatch = self.animation_step == animation_step  # will need to dispatch if step doesn't change
+        # self.animation_step = animation_step
+        # if need_dispatch:
+        #     self.property('animation_step').dispatch(self)
 
+        # Just always trigger
+        self.property('animation_step').dispatch(self)
+        self.animate_changes = True
 
-            texture = cimage.texture
-
-            self.image.texture = texture
-            self.mesh.texture = texture
-            self.texture = texture
-            # TODO Position Image center/zoomed by default
-            # Nexus 10 Image is smaller, test density independent
-            # TODO Is there any benifit to Image vs Rectangle w/ Texture ?
-
-            # No need for Image if we're not taking advantage of ratio maintaining code
-            #img = Image(texture=texture, keep_ratio=True, allow_stretch=True)
-            #img.bind(norm_image_size=self.on_norm_image_size)
-            #self.add_widget(img)
-
-            # Just set Scatter and Rectangle to texture size
-            self.image.size = texture.size
-            self.size = texture.size
-            # Will be positioned and scalled in on_parent_size
+    def add_step(self, step_name, vertices):
+        """Add the specified step as a step position for all the ControlPoints
+        """
+        # Code shouldn't add duplicate step_name
+        assert step_name != setup_step
+        assert step_name not in self.animation_steps_order
+        self.animation_steps_order.append(step_name)
 
 
-            self.mesh_mode = data.get('mesh_mode', self.mesh_mode)
-            triangle_fan_mode = self.mesh_mode == 'triangle_fan'
+        # FIXME Just have invisible centroid ControlPoint?
+        # This check fails because vertices contains centroid vertex, but no corresponding ControlPoint exists
+        # num_vertices = len(vertices) / 4
+        # if num_vertices != len(self.control_points):
+        #     raise ValueError('Number of vertices provided for step "{}" ({}) does not match number of Control Points ({})'
+        #                      .format(step_name, num_vertices, len(self.control_points)))
 
-            self.animation_steps_order = data.get('steps_order', self.animation_steps_order)
+        # Update ControlPoint.positions with this position/step
+        for cp in self.control_points:
+            index = cp.vertex_index
+            cp.positions[step_name] = (vertices[index*4], vertices[index*4+1])
 
-            # indices are actually recalculated, nowhere to set them
-            try:
-                steps = data['steps']
-            except KeyError:
-                # No steps defined, nothing to do
-                return
 
-            mesh = self.mesh
+    def setup_control_points(self, vertices):
+        """Construct ControlPoints for the given vertices.
+         This sets the initial setup_step, determining u, v coordinates.
+        (mesh style x, y, u, v)
+        Note: indices are recalculated, no need to provide them
+        """
+        # Not a fan of how much internal knowledge this code requires, but not worth refactoring too much now
+        # First-pass on setup_step
 
-            # Process step zero, create ControlPoints
-            step_zero = steps[setup_step]
-            verts = step_zero['vertices']
-            cps = []
-            num_verts = len(verts)
-            if num_verts == 0:
-                # Nothing else to do, everything below creates ControlPoints
-                return
+        mesh = self.mesh
 
-            # Not a fan of how much internal knowledge this code requires, but not worth refactoring too much now
-            # First-pass on setup_step
-            for x in range(1 if triangle_fan_mode else 0, num_verts/4):
-                # x,y pos
-                cp = ControlPoint(moved_point_trigger=self._moved_control_point_trigger)
-                cp.vertex_index = x
-                # Adjust index to position in vertices list
-                cp.positions[setup_step] = (verts[x*4], verts[x*4+1])
-                cps.append(cp)
+        triangle_fan_mode = self.mesh_mode == 'triangle_fan'
+        cps = []
+        for x in range(1 if triangle_fan_mode else 0, len(vertices) / 4):
+            # x,y pos
+            cp = ControlPoint(moved_point_trigger=self._moved_control_point_trigger)
+            cp.vertex_index = x
+            # Adjust index to position in vertices list
+            cp.positions[setup_step] = (vertices[x * 4], vertices[x * 4 + 1])
 
-            # Note: items() in Py3
-            for step, step_data in steps.viewitems():
-                if step == setup_step:
-                    continue
+            cps.append(cp)
 
-                self.steps.append(step)
-                verts = step_data['vertices']
-                if len(verts) != num_verts:
-                    raise ValueError('steps vertices different lengths!')
+            # FIXME in old code this was done after setting all positions
+            cp.mesh = mesh  # FIXME old comment: set after so on_pos doesn't do anything
+            self.add_widget(cp)
 
-                # Update ControlPoint.positions with this position/step
-                for cp in cps:
-                    index = cp.vertex_index
-                    cp.positions[step] = (verts[index*4], verts[index*4+1])
+        self.control_points = cps
+        self._previous_step = setup_step  # on_animation_step will reset mesh
 
-            for cp in cps:
-                # cp.move_to_position_index(self.animation_step, animate=False)
-                cp.mesh = mesh  # set after so on_pos doesn't do anything
-                self.add_widget(cp)
-
-            self.control_points = cps
-
-            self._previous_step = setup_step  # on_animation_step will reset mesh
-
-            # Setting animation_step will move the ControlPoints for us and figure out mesh attachment
-            need_dispatch = self.animation_step == animation_step  # will need to dispatch if step doesn't change
-            self.animation_step = animation_step
-            if need_dispatch:
-                self.property('animation_step').dispatch(self)
-
-        finally:
-            self.animate_changes = True
 
     def create_mesh_animator_construction(self):
         """Create the dictionary structure (usable in JSON storage) that will generate
@@ -184,6 +150,7 @@ class AnimationConstructor(Scatter):
         initial_vertices, initial_indices = self.calc_mesh_vertices(setup_step, update_mesh=False)
 
         for step_name in self.animation_steps_order:
+            assert step_name != setup_step  # shouldn't be a specified step
             vertices, _ = self.calc_mesh_vertices(step_name, update_mesh=False)
             # TODO Duration should be set in Tweaks, this should just be default
             # Don't overwrite if Tweaks modified
@@ -199,47 +166,6 @@ class AnimationConstructor(Scatter):
                           'initial_indices': initial_indices}
 
         return {'visuals.animations.MeshAnimator': mesh_anim_args}
-
-    @deprecated
-    def get_animation_data(self):
-        """Generate animation data (as dictionary) for storage in store"""
-
-        # animation_data vs control_point data
-        # first vertex is the triangle_fan point....
-        # just make that a visible unmoveable point?
-
-        # image_filepath (already set)
-        # indices[]
-        # steps:{STEP:{vertices:[]}
-
-        data = {}
-        steps = {}
-
-        data['mesh_mode'] = self.mesh_mode
-        data['steps_order'] = self.animation_steps_order
-
-        # Make sure all required steps are available, even if we this hasn't shown them yet.
-        step_set = set(self.animation_steps_order)
-        if setup_step not in step_set:
-            step_set.add(setup_step)
-
-        for step in step_set:
-            verts, indices = self.calc_mesh_vertices(step, update_mesh=False)
-            # indices always recalculated at the moment, but save for possible future use
-            if 'indices' not in data:
-                data['indices'] = indices
-
-            step_data = {}
-            step_data['vertices'] = verts
-            # FIXME hardcoded 2.4s to open, 0.65 to close
-            # duration to reach this step
-            step_data['duration'] = 2.4 if step=='open_bell' else 0.65
-
-            steps[step] = step_data
-
-        data['steps'] = steps
-        return data
-
 
     def on_parent(self, _, parent):
         parent.bind(size=self.on_parent_size)
@@ -278,11 +204,42 @@ class AnimationConstructor(Scatter):
         w_scale = p_width/float(self.width)
         self.scale = min(h_scale, w_scale)
 
+    def on_image_filepath(self, _, image_filepath):
+        # self has default size at this point, sizing must be done in on_size
+
+        try:
+            self.canvas.remove(self._core_image)
+            Logger.debug('%s: removed old _core_image', self.__class__.__name__)
+        except:
+            pass
+
+        with self.canvas:
+            # mipmap=True changes tex_coords and screws up calculations
+            # TODO Research mipmap more
+            self._core_image = cimage = CoreImage(image_filepath, mipmap=False)
+
+        texture = cimage.texture
+
+        self.image.texture = texture
+        self.mesh.texture = texture
+        self.texture = texture
+        # TODO Position Image center/zoomed by default
+        # Nexus 10 Image is smaller, test density independent
+        # TODO Is there any benifit to Image vs Rectangle w/ Texture ?
+
+        # No need for Image if we're not taking advantage of ratio maintaining code
+        # img = Image(texture=texture, keep_ratio=True, allow_stretch=True)
+        # img.bind(norm_image_size=self.on_norm_image_size)
+        # self.add_widget(img)
+
+        # Just set Scatter and Rectangle to texture size
+        self.image.size = texture.size
+        self.size = texture.size
+        # Will be positioned and scalled in on_parent_size
 
     def on_size(self, _, size):
         Logger.debug(self.__class__.__name__ + '.on_size %s', size)
         self.bbox_diagonal = (size[0]**2 + size[1]**2)**0.5
-
 
     def on_image_opacity(self, _, opacity):
         if self.animate_changes:
@@ -315,8 +272,8 @@ class AnimationConstructor(Scatter):
             raise ValueError('animation_step must be a string, given %s'%step, type(step))
 
         # Track all possible step keys
-        if step not in self.steps:
-            self.steps.append(step)
+        if step != setup_step and step not in self.animation_steps_order:
+            self.animation_steps_order.append(step)
 
         resume_animation = self.animating
         if self.animating:
@@ -468,7 +425,9 @@ class AnimationConstructor(Scatter):
         return verts, indices
 
     def move_control_points(self, position_index, detach_mesh_after):
-        "Move all of the Control Points to the specified position index"
+        """Move all of the Control Points to the specified position index
+        """
+
         on_setup = position_index == setup_step
         for cp in self.control_points:
             cp.hide_trail_line = on_setup

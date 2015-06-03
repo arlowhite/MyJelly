@@ -64,15 +64,14 @@ class JellySelectButton(Button):
         self.store = jelly_store
         info = jelly_store['info']
         self.jelly_id = info['id']
-        self.image_filename = info['image_filepath']
+        # Maybe no overall image, maybe image selection happens at parts?
+        # self.image_filename = info['image_filepath']
 
         super(JellySelectButton, self).__init__(**kwargs)
 
         try:
             # Create moving Jelly within button
-            j = construct_creature(jelly_store)
-            j.angle = 90
-            j.phy_group_num = 1
+            j = construct_creature(jelly_store, angle=90, phy_group_num=1)
             self.jelly = j
             self.ids.creature_widget.set_creature(j)
 
@@ -84,7 +83,7 @@ class JellySelectButton(Button):
 
         except:
             Logger.exception("Problem previewing Jelly %s within button", self.jelly_id)
-            raise
+            # raise
 
     def on_release(self):
         # TODO long press to edit? Other options, delete, etc. Action Menu of JellyEditor?
