@@ -70,7 +70,8 @@ class GooeyBodyPart(object):
             raise ValueError('Other mesh_modes not supported; need to calc centroid in other modes')
 
         # FIXME minimize assupmtions about what binding to
-        self.jelly = creature
+        # In future don't be so jelly name specific
+        self.jelly = self.creature = creature
 
         creature_phy_body = creature.phy_body
 
@@ -327,6 +328,8 @@ class GooeyBodyPart(object):
         # space.add(self.spring1)
         # space.add(self.spring2)
         # space.add(self.rot_spring)
+
+        # Don't bother save space, can just get physics space from creature.environment_wref
 
         for chain in self.chains:
             for shape, drawn_ellipse, spring in chain:

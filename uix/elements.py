@@ -28,7 +28,7 @@ class CreatureWidget(Widget):
         creature.pos = self.center
 
         self.phy_space = phy.Space()
-        creature.bind_physics_space(self.phy_space)
+        creature.bind_environment(self)
         self.canvas.add(creature.canvas)
 
         Clock.schedule_interval(self.update_simulation, self.update_interval)

@@ -129,7 +129,7 @@ class JellyEnvironmentScreen(AppScreen):
                 # self.add_widget(j)
                 self.canvas.add(j.canvas)  # TODO is this right?
                 self.creatures.append(j)
-                j.bind_physics_space(space)
+                j.bind_environment(self)
 
             # break # FIXME remove
 

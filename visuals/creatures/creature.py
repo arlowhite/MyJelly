@@ -2,6 +2,7 @@ __author__ = 'awhite'
 
 import random
 from math import cos, sin, radians, degrees, pi
+from weakref import ref as weakref_ref
 
 from kivy.logger import Logger
 from kivy.graphics import Rectangle, Triangle, Color, Rotate, Translate, InstructionGroup, PushMatrix, PopMatrix, \
@@ -46,7 +47,10 @@ def fix_angle(angle):
 # In Sacrifical Creatures I didn't want the overhead of Widgets, but in this game
 # I'll try them out since it should make things easier and provide some practice
 
-# TODO Probably just do EventDispatcher instead of Widget? Performance test # of Jellies limit
+
+# TODO Replace parent bounds checking behavior with environment
+# Different environment aspects? bounce vs teleport, etc
+
 # Single animation update loop instead of Animation Clocks for each? or chain Animations? &=
 class Creature(object):
     """Visual entity that moves around (update called on game tick)
@@ -75,7 +79,7 @@ class Creature(object):
         moment = 1e5  # moment of inertia, i.e. rotation inertia
         mass = 100
 
-        self.phy_space = None
+        self.environment_wref = None
         self.phy_body = body = phy.Body(mass, moment)
         self.phy_body.velocity_limit = 1000
 
@@ -157,17 +161,40 @@ class Creature(object):
         self._scale.xyz = (scale, scale, 1.0)
 
     def add_body_part(self, part):
+        """Add a body part to this Creature and attach it the the physics space
+        if the Creature is bound to an environment"""
         self.body_parts.append(part)
-        # if self.phy_space:
-        #     part.bind_physics_space(self.phy_space)
 
-    def bind_physics_space(self, space):
-        """Attach to the given physics space"""
-        assert self.phy_space is None  # TODO Need to remove from old space?
 
-        # self.phy_space = space
+        if self.environment_wref:  # Bound to environment
+            env = self.environment_wref()
+            if env is None:
+                # environment was GC'd
+                # This might happen if the old space was removed but this Creature object maintained
+                # Don't know when we'd ever do this so warn for now
+                Logger.warning('Creature environment_wref weakref is None, not binding body part to space')
+
+            else:
+                part.bind_physics_space(env.phy_space)
+
+
+    def bind_environment(self, environment):
+        """Attach to the given environment and its physics space.
+        bind body_parts to physics space as well.
+
+        Required environment attributes
+        - phy_space -- cymunk Space
+        """
+
+        # Not planning on moving Creatures between environments
+        assert self.environment_wref is None
+        space = environment.phy_space
+
+        # Cannot create weakref to space
+        # Create a weakref to make sure avoid circular GC
+        self.environment_wref = weakref_ref(environment)
+
         space.add(self.phy_body, self.phy_shape)  # add physical objects to simulated space
-        #self.phy_body.activate()
 
         for bp in self.body_parts:
             bp.bind_physics_space(space)
