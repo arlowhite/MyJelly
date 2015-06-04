@@ -43,6 +43,10 @@ class CreatureWidget(Widget):
         if hasattr(self, 'creature'):
             self.creature.pos = center
 
+    def destroy(self):
+        Logger.debug('%s: destroy() unschedule update_simulation', self.__class__.__name__)
+        Clock.unschedule(self.update_simulation)
+
     # def on_size(self):
     #     pass
 
@@ -88,9 +92,6 @@ class JellySelectButton(Button):
     def on_release(self):
         # TODO long press to edit? Other options, delete, etc. Action Menu of JellyEditor?
         print(self.last_touch)
-
-
-
 
 class FloatLayoutStencilView(FloatLayout, StencilView):
     pass

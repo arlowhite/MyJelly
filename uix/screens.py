@@ -28,16 +28,47 @@ constructor_class_for_part = {
 }
 
 class AppScreen(Screen):
+    """Provides state capturing methods and calls destroy on child widgets with
+    destroy() method
+
+    If Screens have state to manage and store themselves, they should do it in save_state()
+    Screens should check the state they saved in the constructor.
+    """
 
     def get_state(self):
+        """Returns a dict of state_attributes that can be passed to the Screen's
+        constructor to establish the same state in the future.
+
+        Also calls save_state() if present
+
+        returns None if no state_attributes
+        """
+
+        if hasattr(self, 'save_state'):
+            self.save_state()
+
+        if not hasattr(self.__class__, 'state_attributes'):
+            return None
+
         d = {}
         for attr in self.__class__.state_attributes:
             d[attr] = getattr(self, attr)
 
         return d
 
+    def on_leave(self):
+        if hasattr(self, 'save_state'):
+            self.save_state()
 
-class JellyEnvironmentScreen(Screen):
+        # Check for widgets with destroy methods
+        for widget in self.walk(restrict=True):
+            if hasattr(widget, 'destroy'):
+                widget.destroy()
+
+        # We always switch_to, which destroys old screens
+        self.clear_widgets()
+
+class JellyEnvironmentScreen(AppScreen):
     """Living area for the Jelly where it moves around.
     Tap anywhere to pause and bring-up menu to take car of Jelly
     and get to other screens.
@@ -114,8 +145,6 @@ class JellyEnvironmentScreen(Screen):
             print('change_behavior: current angle=%f  orienting %f deg'%(c.angle, angle))
             c.orient(angle)
 
-
-
     def update_simulation(self, dt):
         # Could pass dt, but docs state:
         # Update the space for the given time step. Using a fixed time step is
@@ -128,6 +157,12 @@ class JellyEnvironmentScreen(Screen):
             c.update(dt)
 
     def pause(self):
+        Logger.debug('{}: pause() unscheduling update_simulation'.format(self.__class__.__name__))
+        Clock.unschedule(self.update_simulation)
+
+    def on_leave(self):
+        super(self.__class__, self).on_leave()
+        Logger.debug('{}: on_leave() unscheduling update_simulation'.format(self.__class__.__name__))
         Clock.unschedule(self.update_simulation)
 
     # TODO UI for leaving Environment screen
@@ -136,7 +171,7 @@ class JellyEnvironmentScreen(Screen):
 
 
 
-class JellySelectionScreen(Screen):
+class JellySelectionScreen(AppScreen):
     "Displays all user's Jellies and option to create new ones"
 
     def __init__(self, **kwargs):
@@ -232,7 +267,7 @@ class JellyAnimationConstructorScreen(AppScreen):
 
         self.ids.animation_constructor.animation_step = step
 
-    def on_leave(self, *args):
+    def save_state(self):
         # After screen leaving animation ended
         # save animation data async
         ac = self.ids.animation_constructor
@@ -250,16 +285,14 @@ class JellyAnimationConstructorScreen(AppScreen):
         constructor_class = constructor_class_for_part[part_name]
         store[part_name] = constructor_class.create_construction_structure(self)
 
-        Logger.debug('{}: saving "{}" {}'
+        Logger.debug('{}: save_state() "{}" {}'
                      .format(self.__class__.__name__, part_name, store[part_name]))
 
         store.store_sync()
 
+
     def get_state(self):
         d = super(JellyAnimationConstructorScreen, self).get_state()
-
-        # Jelly state is stored separately
-        self.on_leave()
 
         ac = self.ids.animation_constructor
         d.update(dict(scatter_pos=ac.pos, scatter_scale=ac.scale,
@@ -268,7 +301,7 @@ class JellyAnimationConstructorScreen(AppScreen):
         return d
 
 
-class NewJellyScreen(Screen):
+class NewJellyScreen(AppScreen):
 
     def __init__(self, **kwargs):
         super(NewJellyScreen, self).__init__(**kwargs)

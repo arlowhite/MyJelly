@@ -63,7 +63,7 @@ class MyJellyApp(App):
         store = load_app_storage()
         screen = self.screen_manager.current_screen
 
-        screen_state = screen.get_state() if hasattr(screen, 'get_state') else None
+        screen_state = screen.get_state()
         state = {'class_name': self.screen_manager.current_screen.__class__.__name__,
                  'state': screen_state}
 
@@ -125,8 +125,6 @@ class MyJellyApp(App):
             raise ValueError('%s is not a Screen!'%screen)
 
         current_screen = self.screen_manager.current_screen
-        if hasattr(current_screen, 'get_state'):
-            current_screen.get_state()
 
         try:
             s = screen_class(**screen_args) if screen_args else screen_class()
@@ -166,9 +164,6 @@ class MyJellyApp(App):
     #     # Hackish, check if AnimationConstructor screen, grab Jelly Data?
     #
     #     pass
-
-
-
 
 
 if __name__ == '__main__':

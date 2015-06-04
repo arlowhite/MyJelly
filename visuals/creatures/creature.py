@@ -1,7 +1,5 @@
 __author__ = 'awhite'
 
-__author__ = 'awhite'
-
 import random
 from math import cos, sin, radians, degrees, pi
 
@@ -160,14 +158,14 @@ class Creature(object):
 
     def add_body_part(self, part):
         self.body_parts.append(part)
-        if self.phy_space:
-            part.bind_physics_space(self.phy_space)
+        # if self.phy_space:
+        #     part.bind_physics_space(self.phy_space)
 
     def bind_physics_space(self, space):
         """Attach to the given physics space"""
         assert self.phy_space is None  # TODO Need to remove from old space?
 
-        self.phy_space = space
+        # self.phy_space = space
         space.add(self.phy_body, self.phy_shape)  # add physical objects to simulated space
         #self.phy_body.activate()
 
