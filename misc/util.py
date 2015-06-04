@@ -16,6 +16,22 @@ def evaluate_thing(thing):
 
     raise ValueError('Unknown thing: '+str(type(thing))+str(thing))
 
+def cleanup_space(space):
+    """Remove all constraints, shapes, and bodies from a Cymunk Space
+    Note: Set your space attribute to None to force earlier garbage collection
+    """
+
+    space.remove(*space.constraints)
+    assert len(space.constraints) == 0
+
+    # shapes is a dict for some reason
+    shapes = space.shapes.values()
+    space.remove(*shapes)
+    assert len(space.shapes) == 0
+
+    space.remove(*space.bodies)
+    assert len(space.bodies) == 0
+
 def not_none_keywords(*not_none_args):
     """Checks that the specified keyword arguments are not None"""
     def check_not_none(f):

@@ -20,6 +20,7 @@ from uix.elements import JellySelectButton
 from uix.animation_constructors import AnimationConstructor
 from data.state_storage import load_jelly_storage, load_all_jellies, delete_jelly, \
     construct_creature, constructable_members
+from util import cleanup_space
 
 
 constructor_class_for_part = {
@@ -162,8 +163,16 @@ class JellyEnvironmentScreen(AppScreen):
 
     def on_leave(self):
         super(self.__class__, self).on_leave()
-        Logger.debug('{}: on_leave() unscheduling update_simulation'.format(self.__class__.__name__))
+        Logger.debug('{}: on_leave() unscheduling update_simulation and cleaning-up physics space'
+                     .format(self.__class__.__name__))
+
         Clock.unschedule(self.update_simulation)
+
+        # Clean-up physics space
+        cleanup_space(self.phy_space)
+
+        # This seems to force garbage collection immediately
+        self.phy_space = None
 
     # TODO UI for leaving Environment screen
     def on_touch_down(self, touch):

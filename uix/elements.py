@@ -18,6 +18,7 @@ import cymunk as phy
 from visuals.creatures.jelly import JellyBell
 from misc.exceptions import InsufficientData
 from data.state_storage import construct_creature
+from util import cleanup_space
 
 class CreatureWidget(Widget):
     """Contains and centers a Creature"""
@@ -44,8 +45,11 @@ class CreatureWidget(Widget):
             self.creature.pos = center
 
     def destroy(self):
-        Logger.debug('%s: destroy() unschedule update_simulation', self.__class__.__name__)
+        Logger.debug('%s: destroy() unschedule update_simulation and cleanup space', self.__class__.__name__)
         Clock.unschedule(self.update_simulation)
+
+        cleanup_space(self.phy_space)
+        self.phy_space = None
 
     # def on_size(self):
     #     pass
