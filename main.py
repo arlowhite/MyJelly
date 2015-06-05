@@ -6,24 +6,19 @@ __version__ = '0.1'
 import kivy
 kivy.require('1.9.0')
 
-#from kivy.config import Config
+from kivy.config import Config
 #Config.set('graphics', 'fullscreen', '0')
+Config.set('kivy', 'log_level', 'debug')
 
 from kivy.app import App
 from kivy.logger import Logger
-from kivy.uix.widget import Widget
-from kivy.uix.filechooser import FileChooserIconView
 from kivy.uix.screenmanager import ScreenManager, Screen
-from kivy.clock import Clock
-
 
 #from behaviors.basic import FollowPath
-from data.state_storage import load_app_storage
+from data.state_storage import load_app_storage, new_jelly
 from uix import screens
 from uix.elements import *
 from uix.hacks_fixes import *
-from uix.animation_constructors import AnimationConstructor
-
 
 class MyJellyApp(App):
     def build(self):

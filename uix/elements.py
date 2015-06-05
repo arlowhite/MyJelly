@@ -18,7 +18,7 @@ import cymunk as phy
 from visuals.creatures.jelly import JellyBell
 from misc.exceptions import InsufficientData
 from data.state_storage import construct_creature
-from util import cleanup_space
+from misc.util import cleanup_space
 
 class CreatureWidget(Widget):
     """Contains and centers a Creature"""
@@ -48,8 +48,10 @@ class CreatureWidget(Widget):
         Logger.debug('%s: destroy() unschedule update_simulation and cleanup space', self.__class__.__name__)
         Clock.unschedule(self.update_simulation)
 
-        cleanup_space(self.phy_space)
-        self.phy_space = None
+        # if set_creature was called and phy_space set
+        if hasattr(self, 'phy_space'):
+            cleanup_space(self.phy_space)
+            self.phy_space = None
 
     # def on_size(self):
     #     pass

@@ -35,7 +35,7 @@ version.filename = %(source.dir)s/main.py
 # (list) Application requirements
 # comma seperated e.g. requirements = sqlite3,kivy
 #requirements = kivy==master
-requirements = kivy, cymunk
+requirements = kivy, cymunk, android
 
 # (list) Garden requirements
 #garden_requirements =
@@ -82,7 +82,7 @@ android.ndk_path = /home/awhite/Apps/android-ndk-r10d
 android.sdk_path = /home/awhite/Apps/android-sdk-linux
 
 # (str) python-for-android git clone directory (if empty, it will be automatically cloned from github)
-android.p4a_dir =/home/awhite/Code/python/kivy/python-for-android
+#android.p4a_dir =/home/awhite/Code/python/kivy/python-for-android
 
 # (list) python-for-android whitelist
 #android.p4a_whitelist =

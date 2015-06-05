@@ -5,6 +5,7 @@ __author__ = 'awhite'
 import os.path as P
 import os
 import inspect
+import uuid
 
 from kivy.storage.jsonstore import JsonStore
 from kivy.app import App
@@ -74,6 +75,25 @@ def load_app_storage():
 
 def __jelly_json_path(jelly_id):
     return P.join(get_jellies_dir(), jelly_id+'.json')
+
+# This should probably be somewhere else (maybe jelly.py?),
+# but this is as good a spot as any for now.
+def new_jelly(image_filepath):
+    "Creates a new jelly store and id and returns the id"
+
+    # TODO If image used before, ask if want to open that Jelly
+    # TODO Copy image file for safe keeping?
+    # TODO check if image file
+    jelly_id = uuid.uuid4().hex
+    jelly = load_jelly_storage(jelly_id)
+    jelly.put('info', image_filepath=image_filepath)
+
+    # TODO This defines the parts available in the menu
+    # In the future user might change this list through the GUI to define optional parts
+    jelly['info']['creature_constructors'].extend(('jelly_bell', 'tentacles'))
+
+    jelly.store_sync()  # As soon as image is saved, save jelly state
+    return jelly_id
 
 def load_jelly_storage(jelly_id):
     if jelly_id is None or len(jelly_id) < 1:

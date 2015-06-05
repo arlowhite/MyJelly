@@ -20,6 +20,8 @@ def cleanup_space(space):
     """Remove all constraints, shapes, and bodies from a Cymunk Space
     Note: Set your space attribute to None to force earlier garbage collection
     """
+    if space is None:
+        return
 
     space.remove(*space.constraints)
     assert len(space.constraints) == 0

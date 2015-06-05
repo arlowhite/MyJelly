@@ -1,7 +1,6 @@
 __author__ = 'awhite'
 
 import os.path as P
-import uuid
 import random
 
 from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
@@ -19,8 +18,8 @@ from visuals.creatures.jelly import JellyBell, GooeyBodyPart
 from uix.elements import JellySelectButton
 from uix.animation_constructors import AnimationConstructor
 from data.state_storage import load_jelly_storage, load_all_jellies, delete_jelly, \
-    construct_creature, constructable_members
-from util import cleanup_space
+    construct_creature, constructable_members, new_jelly
+from misc.util import cleanup_space
 
 
 constructor_class_for_part = {
@@ -195,6 +194,31 @@ class JellySelectionScreen(AppScreen):
         for jdata in jelly_stores:
             grid.add_widget(JellySelectButton(jdata))
 
+    def new_jelly(self):
+        """Launch the UI for the user to create a new jelly from a selected image.
+        On Android, uses native gallery picker Intent
+        """
+        app = App.get_running_app()
+
+        if platform == 'android':
+            from misc import android_ui
+
+            android_ui.user_select_image(self.new_jelly_with_image)
+
+        else:
+            app.open_screen('NewJellyScreen')
+
+    def new_jelly_with_image(self, image_filepath):
+        """"""
+
+        if image_filepath is None:
+            # Nothing to do if user canceled selection
+            return
+
+        jelly_id = new_jelly(image_filepath)
+        App.get_running_app().open_screen('JellyDesignScreen', dict(jelly_id=jelly_id))
+
+
 class JellyDesignScreen(AppScreen):
     # menu to Bell, Tentacles, etc
 
@@ -311,6 +335,7 @@ class JellyAnimationConstructorScreen(AppScreen):
 
 
 class NewJellyScreen(AppScreen):
+    "Screen for selecting an image that creates a new jelly"
 
     def __init__(self, **kwargs):
         super(NewJellyScreen, self).__init__(**kwargs)
@@ -345,17 +370,6 @@ class NewJellyScreen(AppScreen):
             return
 
         filepath = files[0]
-        # TODO If image used before, ask if want to open that Jelly
-        # TODO Copy image file for safe keeping?
-        # TODO check if image file
-        jelly_id = uuid.uuid4().hex
-        jelly = load_jelly_storage(jelly_id)
-        jelly.put('info', image_filepath = filepath)
-
-        # TODO This defines the parts available in the menu
-        # In the future user might change this list through the GUI to define optional parts
-        jelly['info']['creature_constructors'].extend(('jelly_bell', 'tentacles'))
-
-        jelly.store_sync()  # As soon as image is saved, save jelly state
+        jelly_id = new_jelly(filepath)
 
         App.get_running_app().open_screen('JellyDesignScreen', dict(jelly_id=jelly_id))
