@@ -11,6 +11,7 @@ from kivy.graphics import Color, Translate, PushMatrix, PopMatrix, \
     Mesh, Ellipse, Line
 from kivy.core.image import Image as CoreImage
 from kivy.clock import Clock
+from kivy.metrics import dp, mm
 
 import cymunk as phy
 from cymunk import Vec2d
@@ -114,6 +115,7 @@ class GooeyBodyPart(object):
             translated_vertices.extend((xy.x, xy.y, vertices[i+2], vertices[i+3]))
 
         self.outer_chain = outer_chain = self._create_chain(positions, canvas_after, loop_around=True,
+                                                            radius=dp(10),
                                                             mass=outer_chain_mass/len(positions))
 
         closest_stiffness = 1000
@@ -157,7 +159,7 @@ class GooeyBodyPart(object):
 
         ### Center Chain ###
         canvas_after.add(Color(rgba=(0, 0, 1.0, 0.3)))
-        radius = 12
+        radius = dp(12)
         dist_apart = 3 * radius  # rest length
         start = jelly_pos + backwards_vec * (creature.phy_shape.radius + 20)
         positions = [start + backwards_vec * (dist_apart * n) for n in range(2)]

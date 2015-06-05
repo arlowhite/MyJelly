@@ -17,6 +17,7 @@ from kivy.clock import Clock
 from kivy.graphics import StencilUse
 from kivy.graphics.instructions import InstructionGroup
 from kivy.clock import Clock
+from kivy.metrics import mm, dp
 
 import cymunk as phy
 from cymunk import Vec2d
@@ -234,7 +235,7 @@ class Creature(object):
             if self.debug_visuals:
                 # Triangle at pos oriented toward angle (within Rotate transform)
                 Color(rgba=(1, 0, 0, 0.6))
-                x = 6
+                x = dp(6)
                 Triangle(points=(-x, -x, x, -x, 0, x))
 
                 PopMatrix()

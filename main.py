@@ -13,6 +13,7 @@ Config.set('kivy', 'log_level', 'debug')
 from kivy.app import App
 from kivy.logger import Logger
 from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.metrics import Metrics
 
 #from behaviors.basic import FollowPath
 from data.state_storage import load_app_storage, new_jelly
@@ -22,6 +23,8 @@ from uix.hacks_fixes import *
 
 class MyJellyApp(App):
     def build(self):
+        Logger.debug('dpi=%s', Metrics.dpi)
+
         sm = ScreenManager()
         self.screen_manager = sm  # Could use root, but this is more clear
 

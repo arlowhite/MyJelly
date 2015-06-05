@@ -12,7 +12,6 @@ from android import activity
 PythonActivity = autoclass('org.renpy.android.PythonActivity')
 Intent = autoclass('android.content.Intent')
 Uri = autoclass('android.net.Uri')
-Activity = autoclass('android.app.Activity')
 
 # Value of MediaStore.Images.Media.DATA
 MediaStore_Images_Media_DATA = "_data"
@@ -20,6 +19,8 @@ MediaStore_Images_Media_DATA = "_data"
 # Custom request codes
 RESULT_LOAD_IMAGE = 1
 
+Activity = autoclass('android.app.Activity')
+# Activity is only used to get these codes. Could just hardcode them.
     # /** Standard activity result: operation canceled. */
     # public static final int RESULT_CANCELED    = 0;
     # /** Standard activity result: operation succeeded. */
@@ -29,9 +30,8 @@ RESULT_LOAD_IMAGE = 1
     # public static final int RESULT_FIRST_USER   = 1;
 
 def user_select_image(callback):
-    """Open Gallery Activity and return absolute image filepath of image user selected.
-    Uses the callback to pass the selected image. None if user canceled.
-
+    """Open Gallery Activity and call callback with absolute image filepath of image user selected.
+    None if user canceled.
     """
 
     # PythonActivity.mActivity is the instance of the current Activity
@@ -41,40 +41,43 @@ def user_select_image(callback):
     currentActivity = cast('android.app.Activity', PythonActivity.mActivity)
 
     # Forum discussion: https://groups.google.com/forum/#!msg/kivy-users/bjsG2j9bptI/-Oe_aGo0newJ
-    # args=(1, -1, <android.content.Intent at 0xa338a2a0 jclass=android/content/Intent jself=<LocalRef obj=0x101592 at 0xa3536370>>)
     def on_activity_result(request_code, result_code, intent):
         if request_code != RESULT_LOAD_IMAGE:
             Logger.warning('user_select_image: ignoring activity result that was not RESULT_LOAD_IMAGE')
             return
 
-        if result_code == Activity.RESULT_CANCELED:
-            Clock.schedule_once(lambda dt: callback(None), 0)
-            return
+        try:
+            if result_code == Activity.RESULT_CANCELED:
+                Clock.schedule_once(lambda dt: callback(None), 0)
+                return
 
-        if result_code != Activity.RESULT_OK:
-            # This may just go into the void...
-            raise NotImplementedError('Unknown result_code "{}"'.format(result_code))
+            if result_code != Activity.RESULT_OK:
+                # This may just go into the void...
+                raise NotImplementedError('Unknown result_code "{}"'.format(result_code))
 
-        selectedImage = intent.getData();  # Uri
-        filePathColumn = [MediaStore_Images_Media_DATA]; # String[]
-        # Cursor
-        cursor = currentActivity.getContentResolver().query(selectedImage,
-                filePathColumn, None, None, None);
-        cursor.moveToFirst();
+            selectedImage = intent.getData();  # Uri
+            filePathColumn = [MediaStore_Images_Media_DATA]; # String[]
+            # Cursor
+            cursor = currentActivity.getContentResolver().query(selectedImage,
+                    filePathColumn, None, None, None);
+            cursor.moveToFirst();
 
-        # int
-        columnIndex = cursor.getColumnIndex(filePathColumn[0]);
-        # String
-        picturePath = cursor.getString(columnIndex);
-        cursor.close();
-        Logger.info('android_ui: user_select_image() selected %s', picturePath)
+            # int
+            columnIndex = cursor.getColumnIndex(filePathColumn[0]);
+            # String
+            picturePath = cursor.getString(columnIndex);
+            cursor.close();
+            Logger.info('android_ui: user_select_image() selected %s', picturePath)
 
-        # This is possibly in a different thread?
-        Clock.schedule_once(lambda dt: callback(picturePath), 0)
+            # This is possibly in a different thread?
+            Clock.schedule_once(lambda dt: callback(picturePath), 0)
 
+        finally:
+            activity.unbind(on_activity_result=on_activity_result)
+
+    # See: http://pyjnius.readthedocs.org/en/latest/android.html
     activity.bind(on_activity_result=on_activity_result)
 
-    # Documented: http://pyjnius.readthedocs.org/en/latest/android.html
     intent = Intent()
 
     # http://programmerguru.com/android-tutorial/how-to-pick-image-from-gallery/
