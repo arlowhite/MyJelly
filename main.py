@@ -117,7 +117,7 @@ class MyJellyApp(App):
 
     def open_screen(self, screen, screen_args = None):
         "screen: instance or string, screen_state: dictionary"
-        Logger.debug('Opening screen: %s', screen)
+        Logger.debug('Opening screen: %s {%s}', screen, screen_args)
         screen_class = screens.__dict__[screen]
         if not issubclass(screen_class, Screen):
             raise ValueError('%s is not a Screen!'%screen)

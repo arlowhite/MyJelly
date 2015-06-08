@@ -79,6 +79,81 @@
         pos: root.pos
         size: root.size
 
+<CreatureTweakScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+
+        ActionBar:
+            id: action_bar
+            size_hint_y: None
+
+            ActionView:
+
+                ActionPrevious:
+                    title: 'Jelly Tweaks'
+                    # FIXME Manage previous button
+                    on_press: app.open_screen('JellyDesignScreen', {'jelly_id': root.creature_id})
+
+        FloatLayout:
+            id: content_layout
+
+            # In RelativeLayout so panel can be slid around
+            RelativeLayout:
+                id: tweaks_layout
+                size_hint: None, 1.0
+#                width: parent.width - slider.width
+                width: content_layout.width - slider.width
+
+                ScrollView:
+                    GridLayout:
+                    # GridLayout seems to be the only one that calculates the size of children
+                        id: tweaks_container
+                        cols: 1
+                        size_hint_y: None
+                        height: self.minimum_height
+                    # Proper selection list?
+                        orientation: 'vertical'
+
+#                        canvas:
+#                            Line:
+#                                rectangle: 0, 0, self.width, self.height
+
+            Button:  # Maybe ActionButton instead?
+                id: reset_button
+                text: 'Reset Jelly'
+                size_hint: None, None
+                height: cm(1.5)
+                on_press: root.reset_creature()
+
+            ToggleButton:
+                text: 'Turn'
+                size_hint: None, None
+                height: cm(1.5)
+                on_state: root.creature_turning = self.state=='down'
+                x: reset_button.right
+
+            Slider:
+                id: slider
+                orientation: 'vertical'
+                opacity: 0.0
+                size_hint_x: None
+                size_hint_y: 1.0
+                pos_hint_x: None
+                pos_hint_y: 0
+                x: root.right - self.width
+#                pos: 10, 10
+        #        anchor_x: 'right'
+        #        anchor_y: 'center'
+
+<TweakSetting>:
+# BoxLayout
+    orientation: 'vertical'
+
+    Label:
+        id: title_label
+        text: root.title
+
+
 
 <JellyDesignScreen>:
     BoxLayout:
@@ -113,6 +188,7 @@
 
             Button:
                 text: 'Tweaks'
+                on_press: app.open_screen('CreatureTweakScreen', {'creature_id': root.jelly_id})
 
 
 

@@ -152,6 +152,8 @@ class MeshAnimator(EventDispatcher):
         self._animation.cancel(self)
         self._animation = None
 
+        # FIXME Clock.unschedule start_lambda?
+
 
     def on_animation_complete(self, anim, widget):
         # Delay after current step

@@ -10,6 +10,7 @@ from kivy.logger import Logger
 from kivy.uix.widget import Widget
 from kivy.uix.button import Button
 from kivy.uix.spinner import Spinner
+from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import ListProperty, StringProperty
 from kivy.clock import Clock
 
@@ -116,3 +117,13 @@ class LabeledSpinner(Spinner):
 
     def on_text_value(self, _, text_value):
         self.text = self.values[self.text_values.index(text_value)]
+
+# FIXME maybe remove, using SettingsItem
+class TweakSetting(BoxLayout):
+    """A Tweak with a label,
+    TODO help info
+    """
+    # TODO highlight like setting does?
+
+    title = StringProperty()
+    help_text = StringProperty()

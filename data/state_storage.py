@@ -158,7 +158,30 @@ def delete_jelly(jelly_id):
 
 valid_construct_value_types = frozenset((str, unicode, int, long, float, bool, list))
 
-def construct_value(object, **merge_kwargs):
+def lookup_constructable(store_node):
+    """Lookup the Constructor class for a store node.
+     Example: {'visuals.creatures.jelly.JellyBell': {'kwarg1': 'foo}}
+
+     Returns (Constructor, constructor_path, arguments_dict)
+
+     Raises AssertionError if unexpected data.
+     Raises KeyError if not a valid Constructor to access.
+    """
+
+    if not isinstance(store_node, dict):
+        raise AssertionError('Expected store_node to be a dict')
+
+    if len(store_node) != 1:
+        raise AssertionError('Expect just one key that is a Constructor module path, given {}'.format(object.keys()))
+
+    constructor_path, arguments_dict = store_node.items()[0]
+    Constructor = constructable_members[constructor_path]
+    return Constructor, constructor_path, arguments_dict
+
+# keys in creature storage that are actually a dictionary
+__actual_dictionaries = ('tweaks')
+
+def construct_value(store_node, **merge_kwargs):
     """Construct a value from a JSON object retrieved from storage.
     dicts will be recursively constructed. The root dict should have just on key & value.
 
@@ -176,16 +199,16 @@ def construct_value(object, **merge_kwargs):
     Non-dicts are returned if they are valid types.
     """
 
-    if isinstance(object, dict):
-        if len(object) != 1:
-            raise AssertionError('Expect just one key that is a Constructor module path, given {}'.format(object.keys()))
-
-        constructor_path, arguments_dict = object.items()[0]
-        Constructor = constructable_members[constructor_path]
+    if isinstance(store_node, dict):
+        Constructor, constructor_path, arguments_dict = lookup_constructable(store_node)
 
         kwargs = {}
         for argument_name, value in arguments_dict.viewitems():
-            kwargs[argument_name] = construct_value(value)
+            # Terrible hack, but simplest
+            if isinstance(value, dict) and argument_name in __actual_dictionaries:
+                kwargs[argument_name] = value
+            else:
+                kwargs[argument_name] = construct_value(value)
 
         if merge_kwargs:
             kwargs.update(merge_kwargs)
@@ -196,10 +219,10 @@ def construct_value(object, **merge_kwargs):
 
     else:
         # Should be correct type already from JSON
-        if type(object) not in valid_construct_value_types:
-            raise AssertionError('Object of type {} is not a valid value type'.format(type(object)))
+        if type(store_node) not in valid_construct_value_types:
+            raise AssertionError('Object of type {} is not a valid value type'.format(type(store_node)))
 
-        return object
+        return store_node
 
 
     # if dictionary need to recurse

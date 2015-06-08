@@ -57,16 +57,39 @@ class Creature(object):
     """Visual entity that moves around (update called on game tick)
      and is attached to the Cymunk physics system"""
 
-    def __init__(self, creature_id=None, **kwargs):
+    def __init__(self, creature_id=None, tweaks=None, **kwargs):
 
         if creature_id is None:
             raise AssertionError('creature_id must be provided!')
 
         self.creature_id = creature_id
 
-        self.debug_visuals = True  # TODO control with global config
+        # All creatures will have a tweaks dictionary of various values that
+        # change behaviour
+        if tweaks is None:
+            tweaks = {}
 
-        self.parent = kwargs.get('parent', None)  # FIXME remove? shouldn't be aware of parent widget
+        if hasattr(self.__class__, 'tweaks_defaults'):
+            # The Creature class should contain
+            tweaks_defaults = self.__class__.tweaks_defaults
+
+            if __debug__:
+                # Warn about any tweaks passed in that have no defaults
+                no_default = set(tweaks.keys()) - set(tweaks_defaults.keys())
+                if no_default:
+                    Logger.warning('Provided tweaks have no default: %s'%', '.join(no_default))
+
+            d = tweaks_defaults.copy()  # shallow
+            d.update(tweaks)
+            tweaks = d
+
+        elif tweaks:
+            Logger.warning('%s given tweaks but %s does not set tweaks_defaults',
+                           creature_id, self.__class__.__name__)
+
+        self.tweaks = tweaks
+
+        self.debug_visuals = True  # TODO control with global config
 
         self.orienting = False  # is currently orienting toward orienting_angle
         self.orienting_angle = 0
@@ -200,6 +223,28 @@ class Creature(object):
         for bp in self.body_parts:
             bp.bind_physics_space(space)
 
+    def unbind_environment(self):
+        """Remove all of the Creature's physics objects from the physics space
+        """
+        env = self.environment_wref()
+        if env is None:
+            Logger.warning("%s.unbind_environment called but env weakref None", self.__class__.__name__)
+            return
+
+        space = env.phy_space
+
+        for bp in self.body_parts:
+            bp.unbind_physics_space(space)
+
+        space.remove(self.phy_body)
+        space.remove(self.phy_shape)
+
+    def destroy(self):
+        """unbind from the environment and stop all clocks and other activities
+        """
+        self.unbind_environment()
+        # (subclasses will override this to do more)
+
     def draw(self):
         # with self.canvas.before:
         #     PushMatrix()
@@ -241,21 +286,22 @@ class Creature(object):
                 PopMatrix()
 
                 # Orienting Line
-                Color(rgba=(0.0, 1.0, 0.0, 0.8))
+                self._orienting_line_color = Color(rgba=(0.0, 1.0, 0.0, 0.8))
                 self._orienting_line = Line(width=1.2)
 
             PopMatrix()
             PopState()
 
-
-
-
-
-
     def orient(self, angle, throttle=1.0):
         """Orient the Creature toward the angle, using body motion
         throttle 0.0 to 1.0 for how quickly to rotate
         """
+        if angle is None:
+            self.orienting = False
+            if self.debug_visuals:
+                self._orienting_line_color.a = 0.0
+            return
+
         self.orienting = True
         self.orienting_angle = angle = fix_angle(angle)
         self.orienting_throttle = throttle
@@ -263,6 +309,7 @@ class Creature(object):
 
         if self.debug_visuals:
             vec = Vec2d(50, 0).rotated_degrees(angle)
+            self._orienting_line_color.a = 0.8
             self._orienting_line.points = (0, 0, vec.x, vec.y)
 
     def update(self, dt):
@@ -295,24 +342,24 @@ class Creature(object):
         x = body.position.x
         y = body.position.y
 
-        parent = self.parent
-        if parent is not None:
+        env = self.environment_wref()
+        if env is not None:
             out_of_bounds = False
 
-            if y > parent.height:
+            if y > env.height:
                 y = 1
                 out_of_bounds = True
 
             if y < 0:
-                y = parent.height - 1
+                y = env.height - 1
                 out_of_bounds = True
 
-            if x > parent.width:
+            if x > env.width:
                 x = 1
                 out_of_bounds = True
 
             if x < 0:
-                x = parent.width - 1
+                x = env.width - 1
                 out_of_bounds = True
 
             if out_of_bounds:

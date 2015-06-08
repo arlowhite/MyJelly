@@ -11,6 +11,8 @@ from kivy.graphics import Color, Translate, PushMatrix, PopMatrix, \
     Mesh, Ellipse, Line
 from kivy.core.image import Image as CoreImage
 from kivy.clock import Clock
+from kivy.uix.widget import Widget
+from kivy.properties import BoundedNumericProperty
 from kivy.metrics import dp, mm
 
 import cymunk as phy
@@ -58,13 +60,20 @@ class GooeyBodyPart(object):
 
     @not_none_keywords('creature', 'image_filepath', 'vertices', 'indices')
     def __init__(self, creature=None, image_filepath=None, mesh_mode='triangle_fan',
-                 vertices=None, indices=None,
+                 vertices=None, indices=None, tweaks=None,
                  mass=100, stiffness=10, damping=5):
+        # FIXME move mass, stiffness, etc to tweaks
 
         if len(vertices) < 3:
             raise InsufficientData('Less than 3 vertices')
         if len(indices) < 3:
             raise InsufficientData('Less than 3 indices')
+
+        # FIXME BodyPart base class, Creature extends BodyPart
+        if tweaks is None:
+            tweaks = {}
+
+        self.tweaks = tweaks
 
         mesh_mode = str(mesh_mode)  # Mesh.mode does not support unicode
         if mesh_mode != 'triangle_fan':
@@ -321,11 +330,10 @@ class GooeyBodyPart(object):
         force = vec_to_jelly.perpendicular_normal() * (angle_diff * 20)
         first_body.apply_impulse(force)
 
-
-
-
-
     def bind_physics_space(self, space):
+        """Add all physics objects this body part created to the physics space
+        """
+
         # space.add(self.phy_body, self.phy_shape)
         # space.add(self.spring1)
         # space.add(self.spring2)
@@ -338,6 +346,16 @@ class GooeyBodyPart(object):
                 space.add(shape.body, shape)
                 space.add(spring)
 
+    def unbind_physics_space(self, space):
+        """Remove all physics objects that were added in bind_physics_space
+        from the provided space.
+        """
+
+        for chain in self.chains:
+            for shape, drawn_ellipse, spring in chain:
+                space.remove(shape.body, shape)
+                space.remove(spring)
+
     def translate(self, translation_vector):
         for chain in self.chains:
             for shape, drawn_ellipse, spring in chain:
@@ -345,6 +363,7 @@ class GooeyBodyPart(object):
 
         # Force visual update
         self.update()
+
 
 class JellyBell(Creature):
     """An animated Jelly bell Creature that uses a MeshAnimator to animate between an open
@@ -355,6 +374,21 @@ class JellyBell(Creature):
     # So it's much easier to hard-code the knowledge of bell pulses, tentacle drift, etc.
 
     class_path = 'visuals.creatures.jelly.JellyBell'
+
+    # FIXME where to set min/max
+    # Here in data
+    # Using kivy properties?
+    tweaks_defaults = {
+        'push_factor': 0.2,
+        'rotation_offset_percent_radius': 0.3
+        # 'density': mass should be calculated from density and size
+    }
+
+    # Used to generate gui
+    tweaks_validation = {
+        'push_factor': {'type': float, 'min': 0.05, 'max': 0.4, 'ui': 'Slider'},
+        'rotation_offset_percent_radius': {'type': float, 'min': 0.1, 'max': 1.0, 'ui': 'Slider'}
+    }
 
     @not_none_keywords('image_filepath', 'mesh_animator')
     def __init__(self, image_filepath=None, mesh_animator=None, **kwargs):
@@ -421,6 +455,9 @@ class JellyBell(Creature):
         vec.rotate_degrees(self.angle - 90)
         return vec + Vec2d(*self.pos)
 
+    def destroy(self):
+        self.mesh_animator.stop_animation()
+        super(JellyBell, self).destroy()
 
     def draw_creature(self):
         if hasattr(self, 'bell_mesh'):
@@ -513,6 +550,7 @@ class JellyBell(Creature):
         0.0 is down and closed all the way
         """
 
+        tweaks = self.tweaks
         body = self.phy_body
         rot_vector = body.rotation_vector
 
@@ -525,7 +563,7 @@ class JellyBell(Creature):
         # Lots of little impulses? Or use forces?
         # impulse i think, since could rotate and would need to reset_forces and calc new each time anyway
 
-        push_factor = 0.2
+        push_factor = tweaks['push_factor']
         power = self.cross_area * v_diff * (push_factor if self.bell_push_dir else -0.8 * push_factor)
 
 
@@ -536,7 +574,7 @@ class JellyBell(Creature):
             angle_diff = self.orienting_angle - self.angle
 
             # TODO use orienting_throttle
-            offset_dist = radius * 0.3
+            offset_dist = radius * tweaks['rotation_offset_percent_radius']
             if angle_diff > 0:
                 offset_dist *= -1
 

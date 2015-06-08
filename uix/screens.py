@@ -7,18 +7,20 @@ from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.utils import platform
-from kivy.logger import Logger
-from kivy.properties import StringProperty
+from kivy.logger import Logger, LOG_LEVELS
+from kivy.properties import StringProperty, ObjectProperty, BooleanProperty
 from kivy.animation import Animation
+from kivy.uix.settings import Settings
 
 import cymunk as phy
 
 from visuals.animations import setup_step
 from visuals.creatures.jelly import JellyBell, GooeyBodyPart
-from uix.elements import JellySelectButton
+from uix.elements import JellySelectButton, TweakSetting
+from uix.environment import BasicEnvironment
 from uix.animation_constructors import AnimationConstructor
 from data.state_storage import load_jelly_storage, load_all_jellies, delete_jelly, \
-    construct_creature, constructable_members, new_jelly
+    construct_creature, constructable_members, new_jelly, lookup_constructable
 from misc.util import cleanup_space
 
 
@@ -79,46 +81,24 @@ class JellyEnvironmentScreen(AppScreen):
         self.creatures = []
         super(JellyEnvironmentScreen, self).__init__(**kwargs)
 
-        # TODO different update intervals for physics/animations?
-        self.update_interval = 1/60.0
+        self.creature_env = env = BasicEnvironment()
+        env.bind(initialized=self.create_creatures)
+        self.add_widget(env)
 
-    def on_size(self, _, size):
-        if size == [1, 1]:
-            return
-
-        self.initialize()
-        self.unbind(size=self.on_size)
-
-    def initialize(self):
-        "called after size set once"
-        Logger.debug('%s: initialize()', self.__class__.__name__)
-
-        # Setup physics space
-        # TODO need to respond to resizes?
-        # http://niko.in.ua/blog/using-physics-with-kivy/
-        # kw - is some key-word arguments for configuting Space
-        self.phy_space = space = phy.Space()
-        # space.damping = 0.9
-
-        # wall = phy.Segment(phy.Body(), (0, 1), (3000, 1), 0.0)
-        # wall.friction = 0.8
-        # space.add(wall)
-        #
-        # wall = phy.Segment(phy.Body(), (1, 3000), (1, 3000), 0.0)
-        # wall.friction = 0.8
-        # space.add(wall)
+    def create_creatures(self, _, initialized):
+        creature_env = self.creature_env
 
         jelly_num = 1
         for store in load_all_jellies():
             for x in range(1):
                 Logger.debug('Creating Jelly %s', store['info']['id'])
-                pos = random.randint(110, self.width-110), random.randint(110, self.height-110)
+                pos = random.randint(110, self.width - 110), random.randint(110, self.height - 110)
                 # pos = self.width/2.0, self.height/2.0
                 # angle = random.randint(-180, 180)
                 angle = 90
-                j = construct_creature(store, pos=pos, angle=angle, phy_group_num=jelly_num, parent=self)
+                j = construct_creature(store, pos=pos, angle=angle, phy_group_num=jelly_num)
                 jelly_num += 1
-                #j.speed = random.uniform(0, 10.0)
+                # j.speed = random.uniform(0, 10.0)
                 # j.scale = random.uniform(0.75, 2.0)
                 # j.scale = 0.5
                 # j.change_angle(random.randint(-180, 180))
@@ -127,51 +107,14 @@ class JellyEnvironmentScreen(AppScreen):
                 # j.move(random.randint(110, self.width), random.randint(110, self.height))
                 # print("Jelly pos=%s, angle=%s"%(j.pos, j.angle))
                 # self.add_widget(j)
-                self.canvas.add(j.canvas)  # TODO is this right?
-                self.creatures.append(j)
-                j.bind_environment(self)
+                creature_env.add_creature(j)
 
-            # break # FIXME remove
-
-        Clock.schedule_interval(self.update_simulation, self.update_interval)
-        # Clock.schedule_interval(self.change_behavior, 20)
-        # self.change_behavior(0.0)
-
-
-    def change_behavior(self, dt):
-        # TODO Move angle changing code to Jelly
-        for c in self.creatures:
-            angle = c.angle + random.randint(-180, 180)
-            print('change_behavior: current angle=%f  orienting %f deg'%(c.angle, angle))
-            c.orient(angle)
-
-    def update_simulation(self, dt):
-        # Could pass dt, but docs state:
-        # Update the space for the given time step. Using a fixed time step is
-        # highly recommended. Doing so will increase the efficiency of the contact
-        # persistence, requiring an order of magnitude fewer iterations to resolve
-        # the collisions in the usual case.
-        self.phy_space.step(self.update_interval)
-
-        for c in self.creatures:
-            c.update(dt)
-
+    # FIXME Did I bind App to this?
     def pause(self):
         Logger.debug('{}: pause() unscheduling update_simulation'.format(self.__class__.__name__))
-        Clock.unschedule(self.update_simulation)
+        self.creature_env.paused = True
 
-    def on_leave(self):
-        super(self.__class__, self).on_leave()
-        Logger.debug('{}: on_leave() unscheduling update_simulation and cleaning-up physics space'
-                     .format(self.__class__.__name__))
-
-        Clock.unschedule(self.update_simulation)
-
-        # Clean-up physics space
-        cleanup_space(self.phy_space)
-
-        # This seems to force garbage collection immediately
-        self.phy_space = None
+    # TODO def resume
 
     # TODO UI for leaving Environment screen
     def on_touch_down(self, touch):
@@ -373,3 +316,227 @@ class NewJellyScreen(AppScreen):
         jelly_id = new_jelly(filepath)
 
         App.get_running_app().open_screen('JellyDesignScreen', dict(jelly_id=jelly_id))
+
+from kivy.uix.settings import SettingItem
+
+class TweakSettingItem(SettingItem):
+    """Tweak setting menu item
+    """
+
+
+
+
+class CreatureTweakScreen(AppScreen):
+    """Shows creature moving behind screen with various tweaks to adjust the body parts
+    """
+
+    state_attributes = ('creature_id',)
+
+    creature_id = StringProperty()
+    selected = ObjectProperty(None)
+    slider_grabbed = BooleanProperty(False)
+
+    creature_turning = BooleanProperty(False)
+
+    def __init__(self, **kwargs):
+        self._initialized = False
+        self.creature = None
+        self.creature_store = None
+
+        # Mapping of part_name to its tweaks dictionary in the store structure
+        # value is tuple: (tweaks, tweaks_defaults, tweaks_validation)
+        self._store_tweaks = {}
+
+        super(CreatureTweakScreen, self).__init__(**kwargs)
+
+    def on_size(self, _, size):
+        if self.parent is None:
+            # Ignore default size
+            return
+
+        if not self._initialized:
+            self.initialize()
+
+    def initialize(self):
+        self._initialized = True
+
+        creature_id = self.creature_id
+        self.creature_store = store = load_jelly_storage(creature_id)
+        constrs = store['info']['creature_constructors']
+
+        _store_tweaks = self._store_tweaks
+
+        slider = self.ids.slider
+        slider.bind(value=self.on_slider_value)
+
+        for part_name in constrs:
+            # FIXME instead add parts to menu and trigger on_select current part_name
+
+            if part_name not in store:
+                # part not edited yet
+                continue
+
+            part_store = store[part_name]
+            Constructor, constructor_path, _ = lookup_constructable(part_store)
+
+            Logger.debug('Generating tweaks screen for part %s', part_name)
+
+            # Look for tweaks keywordarg in Constructor structure
+            try:
+                tweaks = part_store[constructor_path]['tweaks']
+            except KeyError:
+                tweaks = {}
+                part_store[constructor_path]['tweaks'] = tweaks
+
+            try:
+                tweaks_validation = Constructor.tweaks_validation
+                tweaks_defaults = Constructor.tweaks_defaults
+            except AttributeError:
+                Logger.exception('Unable to create Tweaks screen for part %s', part_name)
+                continue
+
+            _store_tweaks[part_name] = (tweaks, tweaks_defaults, tweaks_validation)
+
+            for tweak_name, options in tweaks_validation.viewitems():
+                # 'push_factor': {'type': float, 'min': 0.05, 'max': 0.4, 'ui': 'Slider'}
+                if options['ui'] != 'Slider':
+                    raise NotImplementedError('Only support Slider')
+
+
+
+                # widget = TweakSetting(title=tweak_name)
+                widget = TweakSettingItem(title=tweak_name, section=part_name, panel=self, key=tweak_name,
+                                          desc='Foo')
+
+                widget.tweak_options = options
+
+                widget.bind(on_release=self._child_on_release)
+                self.add_tweak(widget)
+
+        Clock.schedule_once(self._create_creature_env, 0)
+
+    def _child_on_release(self, setting_item):
+        self.selected = setting_item
+
+    def _create_creature_env(self, dt):
+        self.creature_env = env = BasicEnvironment()
+        self.add_widget(env, len(self.children))
+
+        # Wait until initialized so that creature can be centered in parent
+        env.bind(initialized=self.reset_creature)
+
+    def on_selected(self, _, setting_item):
+        # Property ensures no duplicate calls for same menu item
+        slider_opacity = 0.0 if setting_item is None else 1.0
+        slider = self.ids.slider
+        if slider_opacity != slider.opacity:
+            Animation(opacity=slider_opacity).start(slider)
+
+        if setting_item is None:
+            return
+
+        print('selected', setting_item)
+
+        opts = setting_item.tweak_options
+        # FIXME Assuming Slider
+        min, max = opts['min'], opts['max']
+        slider.value = setting_item.value
+        slider.min = min
+        slider.max = max
+
+    def get_value(self, part_name, tweak_name):
+        """SettingItems call panel.get_value"""
+
+        # TODO think about this code design, this seems awkward...
+        tweaks, tweaks_defaults, tweaks_validation = self._store_tweaks[part_name]
+
+        try:
+            value = tweaks[tweak_name]
+        except KeyError:
+            value = tweaks_defaults[tweak_name]
+
+        Logger.debug('get_value %s:%s=%s', part_name, tweak_name, value)
+        return value
+
+    def set_value(self, part_name, tweak_name, value):
+        # Logger.debug('set_value %s:%s=%s', part_name, tweak_name, value)
+        tweaks, tweaks_defaults, tweaks_validation = self._store_tweaks[part_name]
+        value = tweaks_validation[tweak_name]['type'](value)
+
+        # Update structure in store
+        tweaks[tweak_name] = value
+
+        if self.creature:
+            self.creature.tweaks[tweak_name] = value
+
+    def save_state(self):
+        if Logger.isEnabledFor(LOG_LEVELS['debug']):
+            for part_name, tweak_data in self._store_tweaks.viewitems():
+                tweaks = tweak_data[0]
+                Logger.debug('%s: save_state() part_name=%s\n%s',
+                             self.__class__.__name__, part_name, tweaks)
+
+        self.creature_store.store_sync()
+
+    # TODO Action menu item for each part
+
+    def on_slider_value(self, _, value):
+        assert self.selected is not None
+        self.selected.value = value
+
+    def on_slider_grabbed(self, _, grabbed):
+        if self.selected is None:
+            return
+
+        print('on_silder_grabed', grabbed)
+
+        opacity = 0.0 if grabbed else 1.0
+
+        selected = self.selected
+        not_selected = [x for x in self.ids.tweaks_container.children if x is not selected]
+        for w in not_selected:
+            Animation(opacity=opacity, duration=0.2).start(w)
+
+    def on_touch_down(self, touch):
+        super(self.__class__, self).on_touch_down(touch)
+
+        # grab_list contains weakrefs
+        if self.ids.slider in (x() for x in touch.grab_list):
+            self.slider_grabbed = True
+
+    def on_touch_up(self, touch):
+        if self.ids.slider not in touch.grab_list:
+            self.slider_grabbed = False
+
+    def add_tweak(self, widget):
+        tweaks_container = self.ids.tweaks_container
+        widget.size_hint_y = None
+        widget.size_hint_x = 1.0
+        tweaks_container.add_widget(widget)
+
+    def reset_creature(self, *args):
+        # Just remove and create a new creature
+        env = self.creature_env
+
+        if self.creature:
+            env.remove_creature(self.creature)
+
+        creature_id = self.creature_id
+        store = load_jelly_storage(creature_id)
+        self.creature = creature = construct_creature(store, pos=env.center)
+        env.add_creature(creature)
+
+    def _creature_orient_update(self, dt):
+        # update the creature to always orient left 89 degrees
+        creature = self.creature
+        creature.orient(creature.angle + 89)
+
+    def on_creature_turning(self, _, turning):
+        creature = self.creature
+        print(turning)
+        if turning:
+            Clock.schedule_interval(self._creature_orient_update, 1/20.0)
+
+        else:
+            self.creature.orient(None)
+            Clock.unschedule(self._creature_orient_update)
