@@ -5,10 +5,11 @@ __author__ = 'awhite'
 
 import random
 from math import cos, sin, radians, degrees, pi
+from collections import namedtuple
 
 from kivy.logger import Logger
 from kivy.graphics import Color, Translate, PushMatrix, PopMatrix, \
-    Mesh, Ellipse, Line
+    Mesh, Ellipse, Line, Rectangle
 from kivy.core.image import Image as CoreImage
 from kivy.clock import Clock
 from kivy.uix.widget import Widget
@@ -22,6 +23,8 @@ from visuals.animations import MeshAnimator, setup_step
 from misc.exceptions import InsufficientData
 from misc.util import not_none_keywords
 from .creature import Creature
+
+ChainNode = namedtuple('ChainNode', ['shape', 'body', 'ellipse', 'constraints'])
 
 # TODO PhysicsVisual baseclass?
 class GooeyBodyPart(object):
@@ -64,7 +67,9 @@ class GooeyBodyPart(object):
                  mass=100, stiffness=10, damping=5):
         # FIXME move mass, stiffness, etc to tweaks
 
-        if len(vertices) < 3:
+        num_vertices = len(vertices)
+
+        if num_vertices < 3:
             raise InsufficientData('Less than 3 vertices')
         if len(indices) < 3:
             raise InsufficientData('Less than 3 indices')
@@ -84,9 +89,11 @@ class GooeyBodyPart(object):
         self.jelly = self.creature = creature
 
         creature_phy_body = creature.phy_body
+        debug_visuals = creature.debug_visuals
 
         # backwards unit vector
         backwards_vec = creature_phy_body.rotation_vector.rotated_degrees(180)
+        assert 0.9999 <= backwards_vec.get_length() <= 1.00001
         jelly_pos = Vec2d(creature.pos)
         # +  * (2 * width + jelly.phy_shape.radius / 2.0)
 
@@ -103,7 +110,8 @@ class GooeyBodyPart(object):
 
         ### Outer Chain ###
         # TODO Prevent Mesh triangles from flipping somehow
-        canvas_after.add(Color(rgba=(1.0, 0, 0, 0.3)))
+        if debug_visuals:
+            canvas_after.add(Color(rgba=(1.0, 0, 0, 0.3)))
 
         # FIXME Tentacles vertices don't need all this encoding
         positions = []
@@ -113,8 +121,8 @@ class GooeyBodyPart(object):
         translated_vertices = []
 
         # Start at 4 to skip centroid
-        tentacles_offset = backwards_vec * -1.0
-        for i in range(4, len(vertices), 4):
+        tentacles_offset = backwards_vec * -5.0
+        for i in range(4, num_vertices, 4):
             # within canvas to scale...
             # These are in Image coordinates
             # Can't just scale and rotate because it's attached to the physics system
@@ -127,62 +135,94 @@ class GooeyBodyPart(object):
                                                             radius=dp(10),
                                                             mass=outer_chain_mass/len(positions))
 
-        closest_stiffness = 1000
-        closest_damping = 500
+
+        ### Pin Points ###
+        # TODO customized pin points with GUI
+
+        # Automatic: Finds the closest two points on the left and right side and pins them
+
         # Left Offset
+        # Vector perpendicular to default 0 angle to right
         offset = (0, creature_radius*0.5)
-        offset_world_vec = Vec2d(offset).rotated_degrees(creature.angle) + jelly_pos
-        # with canvas_after:
-        #     Rectangle(pos=(offset_world_vec.x, offset_world_vec.y), size=(10, 10))
-        # offset_vec = jelly_pos + backwards_vec.perpendicular() * (0.5 * jelly_radius)
+        # Rotate the vector to align with creature_angle
+        offset_world_vec = Vec2d(offset).rotated_degrees(creature.angle)
+        offset_world_vec += jelly_pos
 
         # Get closest to offset in outer chain
-        closest = min(outer_chain, key=lambda x: x[0].body.position.get_distance(offset_world_vec))
-        closest_body = closest[0].body
-        rest_length = offset_world_vec.get_distance(closest_body.position)
-        spring = phy.DampedSpring(creature_phy_body, closest_body, offset, (0, 0),
-                                  rest_length, closest_stiffness, closest_damping)
-        closest[2].append(spring)
+        closest = min(outer_chain, key=lambda x: x.body.position.get_distance(offset_world_vec))
+        closest_body = closest.body
+
+        # Now pin with constraint offset relative to jelly_pos (world relative)
+        offset_vec = closest_body.position - jelly_pos
+
+        # Constraint anchor offset needs to be relative to the creature orientation
+        # Example: (0, 10) would be above body 10 (Jelly's left)
+        # So offset_vec needs to be rotated by angle
+        offset_vec = offset_vec.rotated_degrees(-creature.angle)
+
+        spring = phy.PinJoint(creature_phy_body, closest_body, (offset_vec.x, offset_vec.y), (0, 0))
+        closest.constraints.append(spring)
 
         # FIXME Setup groups some other way, Need to detect points that start inside
-        closest[0].group = creature.phy_group_num
+        assert creature.phy_group_num != 0  # must be nonzero to work
+        assert creature.phy_group_num == creature.phy_shape.group
+        # TODO why is this shape needed at all? Just avoid creating? Todo with pin points GUI feature?
+        closest.shape.group = creature.phy_group_num
 
         # Right Offset
         offset = (0, -creature_radius*0.5)
-        offset_world_vec = Vec2d(offset).rotated_degrees(creature.angle) + jelly_pos
-        # with canvas_after:
-        #     Rectangle(pos=(offset_world_vec.x, offset_world_vec.y), size=(10, 10))
-        # offset_vec = jelly_pos + backwards_vec.perpendicular() * (0.5 * jelly_radius)
+        offset_world_vec = Vec2d(offset).rotated_degrees(creature.angle)
+        offset_world_vec += jelly_pos
 
         # Get closest to offset in outer chain
-        closest = min(outer_chain, key=lambda x: x[0].body.position.get_distance(offset_world_vec))
-        closest_body = closest[0].body
-        rest_length = offset_world_vec.get_distance(closest_body.position)
-        spring = phy.DampedSpring(creature_phy_body, closest_body, offset, (0, 0),
-                                  rest_length, closest_stiffness, closest_damping)
-        closest[2].append(spring)
+        closest = min(outer_chain, key=lambda x: x.body.position.get_distance(offset_world_vec))
+        closest_body = closest.body
+
+         # Now pin with constraint offset relative to jelly_pos
+        offset_vec = closest_body.position - jelly_pos
+        offset_vec = offset_vec.rotated_degrees(-creature.angle)
+
+        spring = phy.PinJoint(creature_phy_body, closest_body, (offset_vec.x, offset_vec.y), (0, 0))
+        closest.constraints.append(spring)
 
         # FIXME Setup groups some other way, Need to detect points that start inside
-        closest[0].group = creature.phy_group_num
+        closest.shape.group = creature.phy_group_num
+
+
+        # Calculate average centroid
+        num_averaged = num_vertices/4 - 1
+        cent_pos_x = sum(vertices[x] for x in range(4, num_vertices, 4)) / num_averaged
+        cent_pos_y = sum(vertices[y] for y in range(5, num_vertices, 4)) / num_averaged
+        cent_pos_x, cent_pos_y = creature.texture_xy_to_world(cent_pos_x, cent_pos_y) + tentacles_offset
 
 
         ### Center Chain ###
-        canvas_after.add(Color(rgba=(0, 0, 1.0, 0.3)))
-        radius = dp(12)
-        dist_apart = 3 * radius  # rest length
-        start = jelly_pos + backwards_vec * (creature.phy_shape.radius + 20)
-        positions = [start + backwards_vec * (dist_apart * n) for n in range(2)]
+        # Just at centroid
+        # could be offset a bit...
+        # maybe spring to each pin point, remove correction force
+        if debug_visuals:
+            canvas_after.add(Color(rgba=(0, 0, 1.0, 0.3)))
 
+        radius = dp(12)
+        # Old center chain calculation
+        # dist_apart = 3 * radius  # rest length
+        # start = jelly_pos + backwards_vec * (creature.phy_shape.radius + 20)
+        # positions = [start + backwards_vec * (dist_apart * n) for n in range(2)]
+
+        # For now, just do a single body near centroid (vertical aligned with jelly_pos)
+        dist_creature_to_goocenter = jelly_pos.get_distance((cent_pos_x, cent_pos_y))
+        positions = [jelly_pos + backwards_vec * dist_creature_to_goocenter]
 
         self.center_chain = center_chain = self._create_chain(positions, canvas_after,
                                                               radius=radius, mass=center_chain_mass / len(positions),
-                                                              stiffness=stiffness * 10, damping=damping * 10)
+                                                              stiffness=stiffness * 10, damping=damping * 10,
+                                                              phy_group_num=creature.phy_group_num)
 
         first = center_chain[0]
-        rest_length = creature_phy_body.position.get_distance(first[0].body.position)
-        spring = phy.DampedSpring(creature_phy_body, first[0].body, (0, 0), (0, 0),
+        rest_length = creature_phy_body.position.get_distance(first.body.position)
+        spring = phy.DampedSpring(creature_phy_body, first.body, (0, 0), (0, 0),
                                   rest_length, stiffness, damping)
-        first[2].append(spring)
+        first.constraints.append(spring)
 
         # Link outer chain with center
         self._cross_link(outer_chain, center_chain, stiffness=stiffness*1.0, damping=damping*1.0)
@@ -190,16 +230,25 @@ class GooeyBodyPart(object):
         self.chains = (center_chain, outer_chain)
 
 
-        # Setup Mesh
-
+        ### Setup Mesh ###
 
         # triangle_fan needs centroid
         # TODO Use centroid? Make centroid it's own massive point? single point in center_chain?
         # FIXME Really hackish, but just using first center chain for now with original u, v
-        cent_pos = center_chain[0][0].body.position
-        # Prepend centroid vertices list
-        translated_vertices = [cent_pos.x, cent_pos.y, vertices[2], vertices[3]] + translated_vertices
+        # cent_pos = center_chain[0][0].body.position
 
+        # Prepend centroid vertices list
+        # translated_vertices = [cent_pos.x, cent_pos.y, vertices[2], vertices[3]] + translated_vertices
+
+
+
+        # for i in range(4, len(vertices), 4):
+            # vertices[i]
+            # vertices[i + 1]
+
+        translated_vertices = [cent_pos_x, cent_pos_y, vertices[2], vertices[3]] + translated_vertices
+
+        # TODO probably should be in main canvas, inserted at index
         with creature.canvas.before:
             Color(rgba=(1.0, 1.0, 1.0, 1.0))
             img = CoreImage(image_filepath)
@@ -208,33 +257,37 @@ class GooeyBodyPart(object):
 
         creature.add_body_part(self)
 
+    # FIXME prevent double connections if chain1 is chain2
+    def _cross_link(self, chain1, chain2, stiffness=20, damping=10, connect_num=1):
+        """Connects springs with closest connect_num bodies from the other chain"""
 
-    def _cross_link(self, chain1, chain2, stiffness=20, damping=10):
-        "create springs with closest two points from the other chain"
-
-        for shape, _, springs in chain1:
+        for node1 in chain1:
             # get closest 2 points in other chain
-            # construct list of 2 element touples (dist, body)
+            # construct list of 2 element tuples (dist, body)
             others = []
-            for shape2, _, _ in chain2:
-                others.append((shape.body.position.get_distance(shape2.body.position), shape2.body))
+            for node2 in chain2:
+                others.append((node1.body.position.get_distance(node2.body.position), node2.body))
 
             others.sort(key=lambda x: x[0])
 
             # Springs with first two
-            for x in (0, 1):
-                dist, body = others[x]
-                spring = phy.DampedSpring(shape.body, body, (0, 0), (0, 0),
+            for dist, body in others[:connect_num]:
+                spring = phy.DampedSpring(node1.body, body, (0, 0), (0, 0),
                                           dist, stiffness, damping)
 
-                springs.append(spring)
+                node1.constraints.append(spring)
 
-    def _create_chain(self, positions, canvas, mass=1, radius=10, loop_around=False, stiffness=50, damping=15):
+    def _create_chain(self, positions, canvas, mass=1, radius=10, loop_around=False, stiffness=50, damping=15,
+                      phy_group_num=None):
+        """Creates a chain of bodies (ChainNode) at the specified positions connected together with
+        DampedSpring constraint
 
-        prev = None
+        :returns list of ChainNode"""
 
         assert len(positions) > 0
+        prev = None
 
+        debug_visuals = self.creature.debug_visuals
         mypos = self.jelly.phy_body.position
         farthest_dist = max(pos.get_distance(mypos) for pos in positions)
 
@@ -249,11 +302,17 @@ class GooeyBodyPart(object):
             shape = phy.Circle(body, radius)
             shape.friction = 0.4
             shape.elasticity = 0.3
+            if phy_group_num:
+                shape.group = phy_group_num
+
             body.position = pos
             Logger.debug("Creating chain body mass=%s position=%s radius=%s", m, pos, radius)
 
-            e = Ellipse(pos=(body.position.x - radius, body.position.y - radius), size=(radius * 2.0, radius * 2.0))
-            canvas.add(e)
+            if debug_visuals:
+                e = Ellipse(pos=(body.position.x - radius, body.position.y - radius), size=(radius * 2.0, radius * 2.0))
+                canvas.add(e)
+            else:
+                e = None
 
             springs = []
             if prev:
@@ -263,32 +322,30 @@ class GooeyBodyPart(object):
                                           damping)
                 springs.append(spring)
 
-            item = (shape, e, springs)
+            item = ChainNode(shape=shape, body=body, ellipse=e, constraints=springs)
+
             center_chain.append(item)
 
             prev = item
 
         if loop_around:
             last_body = body
-            body = center_chain[0][0].body
+            body = center_chain[0].body
             dist_apart = last_body.position.get_distance(body.position)
             spring = phy.DampedSpring(last_body, body, (0, 0), (0, 0),
                                       dist_apart, stiffness, damping)
-            center_chain[0][2].append(spring)
+            center_chain[0].constraints.append(spring)
 
         return center_chain
 
-
-        self.update()
-
-
-
     def update(self):
-
+        debug_visuals = self.creature.debug_visuals
         for chain in self.chains:
-            for shape, drawn_ellipse, spring in chain:
-                body = shape.body
-                drawn_ellipse.pos = body.position.x - shape.radius, body.position.y - shape.radius
+            for node in chain:
+                body = node.body
+                radius = node.shape.radius
+                if debug_visuals:
+                    node.ellipse.pos = body.position.x - radius, body.position.y - radius
 
                 # drag force
                 # FIXME High drag is warping out Jellies !?
@@ -300,8 +357,8 @@ class GooeyBodyPart(object):
         verts = self.mesh.vertices
         x = 0.0
         y = 0.0
-        for i, item in enumerate(self.outer_chain):
-            pos = item[0].body.position
+        for i, node in enumerate(self.outer_chain):
+            pos = node.body.position
             verts[4+i*4] = pos.x
             verts[4+1+i*4] = pos.y
 
@@ -309,8 +366,11 @@ class GooeyBodyPart(object):
             y += pos.y
 
         # Centroid
+        # Average of other points
         verts[0] = x / len(self.outer_chain)
         verts[1] = y / len(self.outer_chain)
+
+        # Old Code: Use center body
         # pos = self.center_chain[0][0].body.position
         # verts[0] = pos.x
         # verts[1] = pos.y
@@ -322,13 +382,15 @@ class GooeyBodyPart(object):
 
         # make sure center chain isn't too out of whack
         # couldn't find constraints to do this for me
-        jelly_body = self.jelly.phy_body
-        first_body = self.center_chain[0][0].body
-        vec_to_jelly = jelly_body.position - first_body.position
-        angle_diff = jelly_body.rotation_vector.get_angle_between(vec_to_jelly)
-        #print(angle_diff)
-        force = vec_to_jelly.perpendicular_normal() * (angle_diff * 20)
-        first_body.apply_impulse(force)
+        # Apply a perpendicular impulse
+        # TODO add tweak
+        # jelly_body = self.jelly.phy_body
+        # first_body = self.center_chain[0][0].body
+        # vec_to_jelly = jelly_body.position - first_body.position
+        # angle_diff = jelly_body.rotation_vector.get_angle_between(vec_to_jelly)
+        # #print(angle_diff)
+        # force = vec_to_jelly.perpendicular_normal() * (angle_diff * 20)
+        # first_body.apply_impulse(force)
 
     def bind_physics_space(self, space):
         """Add all physics objects this body part created to the physics space
@@ -342,9 +404,12 @@ class GooeyBodyPart(object):
         # Don't bother save space, can just get physics space from creature.environment_wref
 
         for chain in self.chains:
-            for shape, drawn_ellipse, spring in chain:
-                space.add(shape.body, shape)
-                space.add(spring)
+            for node in chain:
+                space.add(node.body)
+                if node.shape:
+                    space.add(node.shape)
+                if node.constraints:
+                    space.add(node.constraints)
 
     def unbind_physics_space(self, space):
         """Remove all physics objects that were added in bind_physics_space
@@ -352,14 +417,17 @@ class GooeyBodyPart(object):
         """
 
         for chain in self.chains:
-            for shape, drawn_ellipse, spring in chain:
-                space.remove(shape.body, shape)
-                space.remove(spring)
+            for node in chain:
+                space.remove(node.body)
+                if node.shape:
+                    space.remove(node.shape)
+                if node.constraints:
+                    space.remove(node.constraints)
 
     def translate(self, translation_vector):
         for chain in self.chains:
-            for shape, drawn_ellipse, spring in chain:
-                shape.body.position += translation_vector
+            for node in chain:
+                node.body.position += translation_vector
 
         # Force visual update
         self.update()
@@ -448,7 +516,7 @@ class JellyBell(Creature):
             for step_structure in mesh_animator_structure['steps']:
                 anim_constr.add_step(step_structure['step_name'], step_structure['vertices'])
 
-
+    # FIXME move to Creature, util? think about centering_trans concept
     def texture_xy_to_world(self, x, y):
         # position + adjustment + x|y
         vec = Vec2d(x + self.centering_trans_x, y + self.centering_trans_y)

@@ -96,7 +96,7 @@ class Creature(object):
         self.orienting_throttle = 1.0
 
         # TODO just use a global for all creatures?
-        self.phy_group_num = kwargs.get('phy_group_num', 0)
+        self.phy_group_num = kwargs.get('phy_group_num', 1)
 
         # TODO think about scaling mass volume cubic?
         mass = 1e5  # mass of the body i.e. linear moving inertia
