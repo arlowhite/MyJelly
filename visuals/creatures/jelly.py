@@ -17,11 +17,12 @@ from kivy.properties import BoundedNumericProperty
 from kivy.metrics import dp, mm
 
 import cymunk as phy
-from cymunk import Vec2d
+from cymunk import Vec2d, DampedSpring, PinJoint, Body, Circle
 
 from visuals.animations import MeshAnimator, setup_step
 from misc.exceptions import InsufficientData
 from misc.util import not_none_keywords
+from misc.physics_util import world_pos_of_offset, offset_to_pos
 from .creature import Creature
 
 ChainNode = namedtuple('ChainNode', ['shape', 'body', 'ellipse', 'constraints'])
@@ -141,26 +142,20 @@ class GooeyBodyPart(object):
 
         # Automatic: Finds the closest two points on the left and right side and pins them
 
-        # Left Offset
+        ## Left Offset ##
         # Vector perpendicular to default 0 angle to right
-        offset = (0, creature_radius*0.5)
-        # Rotate the vector to align with creature_angle
-        offset_world_vec = Vec2d(offset).rotated_degrees(creature.angle)
-        offset_world_vec += jelly_pos
+        offset_length = creature_radius*0.5
+        # Example: (0, 10) would be above body 10 (Jelly's left)
+        offset_world_vec = world_pos_of_offset(creature_phy_body, (0, offset_length))
 
-        # Get closest to offset in outer chain
+        # Get closest body in outer_chain
         closest = min(outer_chain, key=lambda x: x.body.position.get_distance(offset_world_vec))
         closest_body = closest.body
 
-        # Now pin with constraint offset relative to jelly_pos (world relative)
-        offset_vec = closest_body.position - jelly_pos
+        anchor_offset = offset_to_pos(creature_phy_body, closest_body.position)
 
         # Constraint anchor offset needs to be relative to the creature orientation
-        # Example: (0, 10) would be above body 10 (Jelly's left)
-        # So offset_vec needs to be rotated by angle
-        offset_vec = offset_vec.rotated_degrees(-creature.angle)
-
-        spring = phy.PinJoint(creature_phy_body, closest_body, (offset_vec.x, offset_vec.y), (0, 0))
+        spring = PinJoint(creature_phy_body, closest_body, (anchor_offset.x, anchor_offset.y), (0, 0))
         closest.constraints.append(spring)
 
         # FIXME Setup groups some other way, Need to detect points that start inside
@@ -169,20 +164,14 @@ class GooeyBodyPart(object):
         # TODO why is this shape needed at all? Just avoid creating? Todo with pin points GUI feature?
         closest.shape.group = creature.phy_group_num
 
-        # Right Offset
-        offset = (0, -creature_radius*0.5)
-        offset_world_vec = Vec2d(offset).rotated_degrees(creature.angle)
-        offset_world_vec += jelly_pos
-
-        # Get closest to offset in outer chain
+        ## Right Offset ##
+        offset_world_vec = world_pos_of_offset(creature_phy_body, (0, -offset_length))
+        # (same code as for left offset above)
         closest = min(outer_chain, key=lambda x: x.body.position.get_distance(offset_world_vec))
         closest_body = closest.body
+        anchor_offset = offset_to_pos(creature_phy_body, closest_body.position)
 
-         # Now pin with constraint offset relative to jelly_pos
-        offset_vec = closest_body.position - jelly_pos
-        offset_vec = offset_vec.rotated_degrees(-creature.angle)
-
-        spring = phy.PinJoint(creature_phy_body, closest_body, (offset_vec.x, offset_vec.y), (0, 0))
+        spring = PinJoint(creature_phy_body, closest_body, (anchor_offset.x, anchor_offset.y), (0, 0))
         closest.constraints.append(spring)
 
         # FIXME Setup groups some other way, Need to detect points that start inside
@@ -219,16 +208,27 @@ class GooeyBodyPart(object):
                                                               phy_group_num=creature.phy_group_num)
 
         first = center_chain[0]
-        rest_length = creature_phy_body.position.get_distance(first.body.position)
-        spring = phy.DampedSpring(creature_phy_body, first.body, (0, 0), (0, 0),
-                                  rest_length, stiffness, damping)
+
+        # Create two spring connected to center offset sideways from creature center
+        offset_dist = 0.5 * creature_radius
+        anchor = (0, offset_dist)
+        offset_world_vec = world_pos_of_offset(creature_phy_body, anchor)
+        rest_length = offset_world_vec.get_distance(creature_phy_body.position)
+        spring = DampedSpring(creature_phy_body, first.body, anchor, (0, 0),
+                              rest_length, stiffness, damping)
+        first.constraints.append(spring)
+
+        anchor = (0, -offset_dist)
+        offset_world_vec = world_pos_of_offset(creature_phy_body, anchor)
+        rest_length = offset_world_vec.get_distance(creature_phy_body.position)
+        spring = DampedSpring(creature_phy_body, first.body, anchor, (0, 0),
+                              rest_length, stiffness, damping)
         first.constraints.append(spring)
 
         # Link outer chain with center
         self._cross_link(outer_chain, center_chain, stiffness=stiffness*1.0, damping=damping*1.0)
 
         self.chains = (center_chain, outer_chain)
-
 
         ### Setup Mesh ###
 
@@ -239,8 +239,6 @@ class GooeyBodyPart(object):
 
         # Prepend centroid vertices list
         # translated_vertices = [cent_pos.x, cent_pos.y, vertices[2], vertices[3]] + translated_vertices
-
-
 
         # for i in range(4, len(vertices), 4):
             # vertices[i]
@@ -272,7 +270,7 @@ class GooeyBodyPart(object):
 
             # Springs with first two
             for dist, body in others[:connect_num]:
-                spring = phy.DampedSpring(node1.body, body, (0, 0), (0, 0),
+                spring = DampedSpring(node1.body, body, (0, 0), (0, 0),
                                           dist, stiffness, damping)
 
                 node1.constraints.append(spring)
@@ -298,8 +296,8 @@ class GooeyBodyPart(object):
             m = mass * (dist / farthest_dist)**2.0 + 0.2 * mass
 
             moment = phy.moment_for_circle(m, 0, radius)
-            body = phy.Body(m, moment)
-            shape = phy.Circle(body, radius)
+            body = Body(m, moment)
+            shape = Circle(body, radius)
             shape.friction = 0.4
             shape.elasticity = 0.3
             if phy_group_num:
@@ -318,7 +316,7 @@ class GooeyBodyPart(object):
             if prev:
                 # attach spring to previous
                 dist_apart = prev[0].body.position.get_distance(body.position)
-                spring = phy.DampedSpring(prev[0].body, body, (0, 0), (0, 0), dist_apart, stiffness,
+                spring = DampedSpring(prev[0].body, body, (0, 0), (0, 0), dist_apart, stiffness,
                                           damping)
                 springs.append(spring)
 
@@ -332,7 +330,7 @@ class GooeyBodyPart(object):
             last_body = body
             body = center_chain[0].body
             dist_apart = last_body.position.get_distance(body.position)
-            spring = phy.DampedSpring(last_body, body, (0, 0), (0, 0),
+            spring = DampedSpring(last_body, body, (0, 0), (0, 0),
                                       dist_apart, stiffness, damping)
             center_chain[0].constraints.append(spring)
 

@@ -21,8 +21,7 @@ from uix.environment import BasicEnvironment
 from uix.animation_constructors import AnimationConstructor
 from data.state_storage import load_jelly_storage, load_all_jellies, delete_jelly, \
     construct_creature, constructable_members, new_jelly, lookup_constructable
-from misc.util import cleanup_space
-
+from physics_util import cleanup_space
 
 constructor_class_for_part = {
     'jelly_bell': JellyBell,

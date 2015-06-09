@@ -9,7 +9,8 @@ from kivy.clock import Clock
 
 import cymunk as phy
 
-from misc.util import cleanup_space
+from physics_util import cleanup_space
+
 
 class BasicEnvironment(RelativeLayout):
     """Simple environment"""

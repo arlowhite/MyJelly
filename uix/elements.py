@@ -19,7 +19,8 @@ import cymunk as phy
 from visuals.creatures.jelly import JellyBell
 from misc.exceptions import InsufficientData
 from data.state_storage import construct_creature
-from misc.util import cleanup_space
+from physics_util import cleanup_space
+
 
 class CreatureWidget(Widget):
     """Contains and centers a Creature"""
