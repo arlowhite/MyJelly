@@ -1,0 +1,33 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR ORGANIZATION
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"POT-Creation-Date: 2015-06-09 18:00+PDT\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Transfer-Encoding: ENCODING\n"
+"Generated-By: pygettext.py 1.5\n"
+
+
+#: visuals/creatures/jelly.py:461
+msgid "How much the Jelly pushes with each pulse."
+msgstr ""
+
+#: visuals/creatures/jelly.py:461
+msgid "Push power"
+msgstr ""
+
+#: visuals/creatures/jelly.py:463
+msgid "How hard the Jelly turns."
+msgstr ""
+
+#: visuals/creatures/jelly.py:463
+msgid "Rotation power"
+msgstr ""
+

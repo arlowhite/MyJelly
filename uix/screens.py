@@ -398,14 +398,14 @@ class CreatureTweakScreen(AppScreen):
 
             for tweak_name, options in tweaks_validation.viewitems():
                 # 'push_factor': {'type': float, 'min': 0.05, 'max': 0.4, 'ui': 'Slider'}
-                if options['ui'] != 'Slider':
+                if options.ui != 'Slider':
                     raise NotImplementedError('Only support Slider')
 
 
 
                 # widget = TweakSetting(title=tweak_name)
-                widget = TweakSettingItem(title=tweak_name, section=part_name, panel=self, key=tweak_name,
-                                          desc='Foo')
+                widget = TweakSettingItem(title=options.title, section=part_name, panel=self, key=tweak_name,
+                                          desc=options.desc)
 
                 widget.tweak_options = options
 
@@ -438,10 +438,9 @@ class CreatureTweakScreen(AppScreen):
 
         opts = setting_item.tweak_options
         # FIXME Assuming Slider
-        min, max = opts['min'], opts['max']
         slider.value = setting_item.value
-        slider.min = min
-        slider.max = max
+        slider.min = opts.min
+        slider.max = opts.max
 
     def get_value(self, part_name, tweak_name):
         """SettingItems call panel.get_value"""
@@ -460,7 +459,7 @@ class CreatureTweakScreen(AppScreen):
     def set_value(self, part_name, tweak_name, value):
         # Logger.debug('set_value %s:%s=%s', part_name, tweak_name, value)
         tweaks, tweaks_defaults, tweaks_validation = self._store_tweaks[part_name]
-        value = tweaks_validation[tweak_name]['type'](value)
+        value = tweaks_validation[tweak_name].type(value)
 
         # Update structure in store
         tweaks[tweak_name] = value

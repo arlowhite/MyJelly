@@ -3,6 +3,9 @@ __author__ = 'awhite'
 # Body parts that make up Jelly Creature
 # DO NOT Rename or Move any classes from here as the class path is serialized
 
+import gettext
+_ = gettext.lgettext
+
 import random
 from math import cos, sin, radians, degrees, pi
 from collections import namedtuple
@@ -431,6 +434,9 @@ class GooeyBodyPart(object):
         self.update()
 
 
+# could do constraints dict, but just put min, max in tuple for simplicity
+TweakInfo = namedtuple('TweakInfo', 'title desc type ui min max')
+
 class JellyBell(Creature):
     """An animated Jelly bell Creature that uses a MeshAnimator to animate between an open
     and closed position. Applies physics forces in proportion with Bell animation.
@@ -452,8 +458,10 @@ class JellyBell(Creature):
 
     # Used to generate gui
     tweaks_validation = {
-        'push_factor': {'type': float, 'min': 0.05, 'max': 0.4, 'ui': 'Slider'},
-        'rotation_offset_percent_radius': {'type': float, 'min': 0.1, 'max': 1.0, 'ui': 'Slider'}
+        'push_factor': TweakInfo(_('Push power'), _('How much the Jelly pushes with each pulse.'),
+                                 float, 'Slider', 0.05, 0.4),
+        'rotation_offset_percent_radius': TweakInfo(_('Rotation power'), _('How hard the Jelly turns.'),
+                                                    float, 'Slider', 0.1, 1.0)
     }
 
     @not_none_keywords('image_filepath', 'mesh_animator')

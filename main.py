@@ -3,6 +3,13 @@
 __author__ = 'awhite'
 __version__ = '0.1'
 
+import gettext
+
+# Localization setup
+gettext.bindtextdomain('messages', 'locale')
+gettext.textdomain('messages')
+_ = gettext.lgettext
+
 import kivy
 kivy.require('1.9.0')
 
