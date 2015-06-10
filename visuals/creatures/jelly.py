@@ -29,8 +29,8 @@ from .creature import Creature
 
 ChainNode = namedtuple('ChainNode', ['shape', 'body', 'ellipse', 'constraints'])
 
-# Doesn't seem to avoid warp away issue
-SPRING_MAX_FORCE = 1.0
+# Doesn't seem to have effect regardless of value, don't think this applies to springs, only hard connections
+SPRING_MAX_FORCE = 1e6
 # TODO max_bias?
 
 # TODO PhysicsVisual baseclass?
@@ -357,8 +357,15 @@ class GooeyBodyPart(object):
                     node.ellipse.pos = body.position.x - radius, body.position.y - radius
 
                 # drag force
-                # FIXME High drag is warping out Jellies !?
+                # drag_force can be inf with high push power!? not sure why this happens
+                # TODO tweak
                 drag_force = body.velocity.rotated_degrees(180) * (body.velocity.get_length_sqrd() * 0.000001)
+
+                force = drag_force.get_length_sqrd()
+                if force > 30.0:
+                    # TODO does this value need to be different depending on mass?
+                    drag_force.length = 30.0
+
                 body.apply_impulse(drag_force)
 
 
