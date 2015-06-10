@@ -19,8 +19,7 @@ from kivy.uix.widget import Widget
 from kivy.properties import BoundedNumericProperty
 from kivy.metrics import dp, mm
 
-import cymunk as phy
-from cymunk import Vec2d, DampedSpring, PinJoint, Body, Circle
+from cymunk import Vec2d, DampedSpring, PinJoint, Body, Circle, moment_for_circle
 
 from visuals.animations import MeshAnimator, setup_step
 from misc.exceptions import InsufficientData
@@ -29,6 +28,10 @@ from misc.physics_util import world_pos_of_offset, offset_to_pos
 from .creature import Creature
 
 ChainNode = namedtuple('ChainNode', ['shape', 'body', 'ellipse', 'constraints'])
+
+# Doesn't seem to avoid warp away issue
+SPRING_MAX_FORCE = 1.0
+# TODO max_bias?
 
 # TODO PhysicsVisual baseclass?
 class GooeyBodyPart(object):
@@ -219,6 +222,7 @@ class GooeyBodyPart(object):
         rest_length = offset_world_vec.get_distance(creature_phy_body.position)
         spring = DampedSpring(creature_phy_body, first.body, anchor, (0, 0),
                               rest_length, stiffness, damping)
+        spring.max_force = SPRING_MAX_FORCE
         first.constraints.append(spring)
 
         anchor = (0, -offset_dist)
@@ -226,6 +230,7 @@ class GooeyBodyPart(object):
         rest_length = offset_world_vec.get_distance(creature_phy_body.position)
         spring = DampedSpring(creature_phy_body, first.body, anchor, (0, 0),
                               rest_length, stiffness, damping)
+        spring.max_force = SPRING_MAX_FORCE
         first.constraints.append(spring)
 
         # Link outer chain with center
@@ -275,6 +280,7 @@ class GooeyBodyPart(object):
             for dist, body in others[:connect_num]:
                 spring = DampedSpring(node1.body, body, (0, 0), (0, 0),
                                           dist, stiffness, damping)
+                spring.max_force = SPRING_MAX_FORCE
 
                 node1.constraints.append(spring)
 
@@ -298,7 +304,7 @@ class GooeyBodyPart(object):
             dist = mypos.get_distance(pos)
             m = mass * (dist / farthest_dist)**2.0 + 0.2 * mass
 
-            moment = phy.moment_for_circle(m, 0, radius)
+            moment = moment_for_circle(m, 0, radius)
             body = Body(m, moment)
             shape = Circle(body, radius)
             shape.friction = 0.4
@@ -321,6 +327,7 @@ class GooeyBodyPart(object):
                 dist_apart = prev[0].body.position.get_distance(body.position)
                 spring = DampedSpring(prev[0].body, body, (0, 0), (0, 0), dist_apart, stiffness,
                                           damping)
+                spring.max_force = SPRING_MAX_FORCE
                 springs.append(spring)
 
             item = ChainNode(shape=shape, body=body, ellipse=e, constraints=springs)
@@ -335,6 +342,7 @@ class GooeyBodyPart(object):
             dist_apart = last_body.position.get_distance(body.position)
             spring = DampedSpring(last_body, body, (0, 0), (0, 0),
                                       dist_apart, stiffness, damping)
+            spring.max_force = SPRING_MAX_FORCE
             center_chain[0].constraints.append(spring)
 
         return center_chain
@@ -452,16 +460,21 @@ class JellyBell(Creature):
     # Using kivy properties?
     tweaks_defaults = {
         'push_factor': 0.2,
-        'rotation_offset_percent_radius': 0.3
+        'rotation_offset_percent_radius': 0.3,
         # 'density': mass should be calculated from density and size
+        'density': 1e-5
     }
 
     # Used to generate gui
     tweaks_validation = {
         'push_factor': TweakInfo(_('Push power'), _('How much the Jelly pushes with each pulse.'),
-                                 float, 'Slider', 0.05, 0.4),
+                                 float, 'Slider', 0.05, 1.0),
         'rotation_offset_percent_radius': TweakInfo(_('Rotation power'), _('How hard the Jelly turns.'),
-                                                    float, 'Slider', 0.1, 1.0)
+                                                    float, 'Slider', 0.1, 1.0),
+        # mass is simpler for user to understand
+        # mass units per cubic volume (world coordinate units)
+        'density': TweakInfo(_('Mass'), _('How heavy the Jelly is.'),
+                             float, 'Slider', 1e-6, 1e-4)
     }
 
     @not_none_keywords('image_filepath', 'mesh_animator')
@@ -478,6 +491,8 @@ class JellyBell(Creature):
         # indices of the Bell Mesh that can be the farthest horizontally to the right
         # (used to determine the bell_diameter dynamically)
         self._rightmost_vertices_for_step = {}
+
+        # Required for Creature.mass calculation
 
         super(JellyBell, self).__init__(**kwargs)
 
@@ -537,6 +552,8 @@ class JellyBell(Creature):
         if hasattr(self, 'bell_mesh'):
             raise AssertionError('Already called draw_creature!')
 
+        tweaks = self.tweaks
+
         # Draw Jelly Bell
 
         a = self.mesh_animator
@@ -562,15 +579,27 @@ class JellyBell(Creature):
 
         PopMatrix()
 
+        # Create Physics shape
+        radius = self.calc_bell_radius()
+        self.phy_shape = Circle(self.phy_body, radius, (0, 0))
+        self.phy_shape.friction = 0.4
+        self.phy_shape.elasticity = 0.3
+        self.phy_shape.group = self.phy_group_num
+
         # Visualize physics shape
-        # size will be set to radius in calc_bell_radius()
         if self.debug_visuals:
             Color(rgba=(0.1, 0.4, 0.5, 0.9))
-            self._phys_shape_ellipse = Line(ellipse=(-5, -5, 10, 10))
-            # Ellipse(pos=(-5, -5), size=(10, 10))
+            self._phys_shape_ellipse = Line(ellipse=(-radius, -radius, 2.0 * radius, 2.0 * radius))
 
-        # Update Physics shape
-        self.calc_bell_radius()
+        density = tweaks['density']
+        # volume of sphere: (4/3) pi * r^3
+        # hemisphere 1/2
+        # cross_area is pi * r^2
+        volume = self.cross_area * radius * (4 / 6.0)
+        self.mass = density * volume
+        Logger.debug('%s: updating mass=%s, volume=%s, density=%s, radius=%s',
+                     self.__class__.__name__, self.mass, volume, density, radius)
+        # moment already updated in calc_bell_radius
 
     def calc_bell_radius(self):
         """Get the current bell radius
@@ -595,16 +624,8 @@ class JellyBell(Creature):
         # Maybe calc moment manually instead of using function?
         # r_sqd = rightmost_dist*rightmost_dist
         # self.phy_body.moment = (pi / 2.0) * r_sqd * r_sqd
-        self.phy_body.moment = phy.moment_for_circle(self.phy_body.mass, 0, scaled_bell_radius)
+        self.phy_body.moment = moment_for_circle(self.phy_body.mass, 0, scaled_bell_radius)
         self.cross_area = pi * scaled_bell_radius * scaled_bell_radius
-
-        # Will be affected by Scale, so don't use scaled_bell_radius
-        if self.debug_visuals:
-            shape_radius = self.phy_shape.radius
-            self._phys_shape_ellipse.ellipse = (-shape_radius, -shape_radius,
-                                                shape_radius * 2.0, shape_radius * 2.0)
-            # self._phys_shape_ellipse.pos = (-rightmost_dist, -rightmost_dist)
-            # self._phys_shape_ellipse.size = (rightmost_dist * 2.0, rightmost_dist * 2.0)
 
         return rightmost_dist
 

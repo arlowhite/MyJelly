@@ -49,7 +49,7 @@ def fix_angle(angle):
 # I'll try them out since it should make things easier and provide some practice
 
 
-# TODO Replace parent bounds checking behavior with environment
+# TODO Scale creature
 # Different environment aspects? bounce vs teleport, etc
 
 # Single animation update loop instead of Animation Clocks for each? or chain Animations? &=
@@ -95,28 +95,16 @@ class Creature(object):
         self.orienting_angle = 0
         self.orienting_throttle = 1.0
 
-        # TODO just use a global for all creatures?
+        # TODO just use a incrementing global for all creatures?
         self.phy_group_num = kwargs.get('phy_group_num', 1)
 
-        # TODO think about scaling mass volume cubic?
-        mass = 1e5  # mass of the body i.e. linear moving inertia
-        moment = 1e5  # moment of inertia, i.e. rotation inertia
-        mass = 100
-
         self.environment_wref = None
-        self.phy_body = body = phy.Body(mass, moment)
-        self.phy_body.velocity_limit = 1000
+        # mass and moment will be updated after subclass draws
+        self.phy_body = body = phy.Body(1, 1)
+        self.phy_body.velocity_limit = 1000  # TODO units?
 
         # Composite body parts that update every tick
         self.body_parts = []
-
-        #box = phy.Poly.create_box(body, size=(200, 100))
-        radius = 100
-        self.phy_shape = phy.Circle(body, radius, (0, 0))
-        self.phy_shape.friction = 0.4
-        self.phy_shape.elasticity = 0.3
-        self.phy_shape.group = self.phy_group_num
-        #body.position = 400, 100  # set some position of body in simulated space coordinates
 
         # Set properties that will be used within draw()
         # pos and angle are stored in the physics objects
@@ -184,6 +172,15 @@ class Creature(object):
         # TODO what does z do for 2D?
         self._scale.xyz = (scale, scale, 1.0)
 
+    @property
+    def mass(self):
+        return self.phy_body.mass
+
+    @mass.setter
+    def mass(self, mass):
+        self.phy_body.mass = mass
+
+
     def add_body_part(self, part):
         """Add a body part to this Creature and attach it the the physics space
         if the Creature is bound to an environment"""
@@ -218,7 +215,9 @@ class Creature(object):
         # Create a weakref to make sure avoid circular GC
         self.environment_wref = weakref_ref(environment)
 
-        space.add(self.phy_body, self.phy_shape)  # add physical objects to simulated space
+        space.add(self.phy_body)  # add physical objects to simulated space
+        if hasattr(self, 'phy_shape'):
+            space.add(self.phy_shape)
 
         for bp in self.body_parts:
             bp.bind_physics_space(space)
@@ -237,7 +236,8 @@ class Creature(object):
             bp.unbind_physics_space(space)
 
         space.remove(self.phy_body)
-        space.remove(self.phy_shape)
+        if hasattr(self, 'phy_shape'):
+            space.remove(self.phy_shape)
 
     def destroy(self):
         """unbind from the environment and stop all clocks and other activities

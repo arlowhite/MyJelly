@@ -5,7 +5,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
-"POT-Creation-Date: 2015-06-09 18:00+PDT\n"
+"POT-Creation-Date: 2015-06-09 18:08+PDT\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -15,19 +15,27 @@ msgstr ""
 "Generated-By: pygettext.py 1.5\n"
 
 
-#: visuals/creatures/jelly.py:461
+#: visuals/creatures/jelly.py:462
 msgid "How much the Jelly pushes with each pulse."
 msgstr ""
 
-#: visuals/creatures/jelly.py:461
+#: visuals/creatures/jelly.py:462
 msgid "Push power"
 msgstr ""
 
-#: visuals/creatures/jelly.py:463
+#: visuals/creatures/jelly.py:464
 msgid "How hard the Jelly turns."
 msgstr ""
 
-#: visuals/creatures/jelly.py:463
+#: visuals/creatures/jelly.py:464
 msgid "Rotation power"
+msgstr ""
+
+#: visuals/creatures/jelly.py:468
+msgid "How heavy the Jelly is."
+msgstr ""
+
+#: visuals/creatures/jelly.py:468
+msgid "Mass"
 msgstr ""
 
