@@ -7,16 +7,8 @@ from weakref import ref as weakref_ref
 from kivy.logger import Logger
 from kivy.graphics import Rectangle, Triangle, Color, Rotate, Translate, InstructionGroup, PushMatrix, PopMatrix, \
     PushState, PopState, Canvas, Mesh, Scale, Ellipse, Line, ClearColor
-from kivy.vector import Vector
-from kivy.core.image import Image as CoreImage
-from kivy.core.image import ImageLoader
-from kivy.uix.widget import Widget
-from kivy.properties import NumericProperty, BoundedNumericProperty
-from kivy.animation import Animation
-from kivy.clock import Clock
-from kivy.graphics import StencilUse
-from kivy.graphics.instructions import InstructionGroup
-from kivy.clock import Clock
+from kivy.event import EventDispatcher
+from kivy.properties import NumericProperty, BoundedNumericProperty, BooleanProperty
 from kivy.metrics import mm, dp
 
 import cymunk as phy
@@ -53,14 +45,18 @@ def fix_angle(angle):
 # Different environment aspects? bounce vs teleport, etc
 
 # Single animation update loop instead of Animation Clocks for each? or chain Animations? &=
-class Creature(object):
+class Creature(EventDispatcher):
     """Visual entity that moves around (update called on game tick)
      and is attached to the Cymunk physics system"""
+
+    mass = NumericProperty(1.0e6)
 
     def __init__(self, creature_id=None, tweaks=None, **kwargs):
 
         if creature_id is None:
             raise AssertionError('creature_id must be provided!')
+
+        super(Creature, self).__init__(**kwargs)
 
         self.creature_id = creature_id
 
@@ -172,14 +168,8 @@ class Creature(object):
         # TODO what does z do for 2D?
         self._scale.xyz = (scale, scale, 1.0)
 
-    @property
-    def mass(self):
-        return self.phy_body.mass
-
-    @mass.setter
-    def mass(self, mass):
+    def on_mass(self, o, mass):
         self.phy_body.mass = mass
-
 
     def add_body_part(self, part):
         """Add a body part to this Creature and attach it the the physics space

@@ -15,7 +15,7 @@ from kivy.graphics import Color, Translate, PushMatrix, PopMatrix, \
     Mesh, Ellipse, Line, Rectangle
 from kivy.core.image import Image as CoreImage
 from kivy.clock import Clock
-from kivy.uix.widget import Widget
+from kivy.event import EventDispatcher
 from kivy.properties import BoundedNumericProperty
 from kivy.metrics import dp, mm
 
@@ -34,11 +34,13 @@ SPRING_MAX_FORCE = 1e6
 # TODO max_bias?
 
 # TODO PhysicsVisual baseclass?
-class GooeyBodyPart(object):
+class GooeyBodyPart(EventDispatcher):
     """Creates a Mesh that behaves as gooey mass by creating physical springs between all vertices
     and stiffer center skeleton"""
 
     class_path = 'visuals.creatures.jelly.GooeyBodyPart'
+
+    mass = BoundedNumericProperty(1.0, min=1.0)
 
     @staticmethod
     def create_construction_structure(anim_constr_screen):
@@ -111,7 +113,9 @@ class GooeyBodyPart(object):
         creature_radius = creature.phy_shape.radius  # FIXME assumes Circle shape
 
         # Mass
+        # TODO make fraction of bell a tweak
         tentacles_total_mass = 0.5 * creature_phy_body.mass
+        self.mass = tentacles_total_mass
         center_chain_mass = 0.5 * tentacles_total_mass
         outer_chain_mass = tentacles_total_mass - center_chain_mass
 
@@ -238,6 +242,10 @@ class GooeyBodyPart(object):
 
         self.chains = (center_chain, outer_chain)
 
+        self._store_body_masses()
+        creature.bind(mass=self.on_creature_mass)
+        self.bind(mass=self.on_mass_changed)
+
         ### Setup Mesh ###
 
         # triangle_fan needs centroid
@@ -262,6 +270,27 @@ class GooeyBodyPart(object):
                                     vertices=translated_vertices)
 
         creature.add_body_part(self)
+
+    # TODO maybe move these to BodyPart subclass as well? Research metaclasses
+    def _store_body_masses(self):
+        """Store a mapping of each body to its percentage of the overall mass so
+        that mass can be dynamically updated without excesive calculation."""
+        # Map Body -> percent_mass
+        self._body_masses = body_masses = {}
+        total_mass = self.mass
+
+        for chain in self.chains:
+            for node in chain:
+                body_masses[node.body] = node.body.mass / total_mass
+
+    def on_mass_changed(self, o, mass):
+        """Distribute the mass among all bodies as recorded in _store_body_masses
+        """
+
+        Logger.trace('%s: on_mass_changed(%s)', self.__class__.__name__, mass)
+        for body, portion in self._body_masses.viewitems():
+            body.mass = portion * mass
+
 
     # FIXME prevent double connections if chain1 is chain2
     def _cross_link(self, chain1, chain2, stiffness=20, damping=10, connect_num=1):
@@ -448,6 +477,11 @@ class GooeyBodyPart(object):
         # Force visual update
         self.update()
 
+    def on_creature_mass(self, o, mass):
+        "Update all bodies mass"
+        # TODO 0.5 from tweak
+        self.mass = 0.5 * mass
+
 
 # could do constraints dict, but just put min, max in tuple for simplicity
 TweakInfo = namedtuple('TweakInfo', 'title desc type ui min max')
@@ -551,6 +585,11 @@ class JellyBell(Creature):
         vec.rotate_degrees(self.angle - 90)
         return vec + Vec2d(*self.pos)
 
+    def set_tweak(self, name, value):
+        self.tweaks[name] = value
+        if name == 'density':
+            self.mass = value * self.volume
+
     def destroy(self):
         self.mesh_animator.stop_animation()
         super(JellyBell, self).destroy()
@@ -602,7 +641,7 @@ class JellyBell(Creature):
         # volume of sphere: (4/3) pi * r^3
         # hemisphere 1/2
         # cross_area is pi * r^2
-        volume = self.cross_area * radius * (4 / 6.0)
+        self.volume = volume = self.cross_area * radius * (4 / 6.0)
         self.mass = density * volume
         Logger.debug('%s: updating mass=%s, volume=%s, density=%s, radius=%s',
                      self.__class__.__name__, self.mass, volume, density, radius)

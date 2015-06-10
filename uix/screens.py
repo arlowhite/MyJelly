@@ -465,7 +465,7 @@ class CreatureTweakScreen(AppScreen):
         tweaks[tweak_name] = value
 
         if self.creature:
-            self.creature.tweaks[tweak_name] = value
+            self.creature.set_tweak(tweak_name, value)
 
     def save_state(self):
         if Logger.isEnabledFor(LOG_LEVELS['debug']):
