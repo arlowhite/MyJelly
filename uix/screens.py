@@ -341,6 +341,7 @@ class CreatureTweakScreen(AppScreen):
         self._initialized = False
         self.creature = None
         self.creature_store = None
+        self.__adjusting_slider = False
 
         # Mapping of part_name to its tweaks dictionary in the store structure
         # value is tuple: (tweaks, tweaks_defaults, tweaks_validation)
@@ -434,13 +435,23 @@ class CreatureTweakScreen(AppScreen):
         if setting_item is None:
             return
 
-        print('selected', setting_item)
-
         opts = setting_item.tweak_options
         # FIXME Assuming Slider
-        slider.value = setting_item.value
-        slider.min = opts.min
-        slider.max = opts.max
+        value = setting_item.value
+        if __debug__:
+            Logger.debug('%s: on_selected %s setting Slider.value=%s', self.__class__.__name__,
+                         setting_item.key, value)
+        # min/max are old values, so must set them first otherwise they will adjust value if
+        # it is outside range. However, changing min/max will also adjust current value in the same way, so need to
+        # disable on_slider_value side-effects.
+        self.__adjusting_slider = True
+        try:
+            # Set min, max, then value, otherwise value may be limited by Slider
+            slider.min = opts.min
+            slider.max = opts.max
+            slider.value = value
+        finally:
+            self.__adjusting_slider = False
 
     def get_value(self, part_name, tweak_name):
         """SettingItems call panel.get_value"""
@@ -453,7 +464,7 @@ class CreatureTweakScreen(AppScreen):
         except KeyError:
             value = tweaks_defaults[tweak_name]
 
-        Logger.debug('get_value %s:%s=%s', part_name, tweak_name, value)
+        Logger.debug('%s: get_value %s:%s=%s', self.__class__.__name__, part_name, tweak_name, value)
         return value
 
     def set_value(self, part_name, tweak_name, value):
@@ -479,14 +490,13 @@ class CreatureTweakScreen(AppScreen):
     # TODO Action menu item for each part
 
     def on_slider_value(self, _, value):
-        assert self.selected is not None
-        self.selected.value = value
+        if not self.__adjusting_slider:
+            assert self.selected is not None
+            self.selected.value = value
 
     def on_slider_grabbed(self, _, grabbed):
         if self.selected is None:
             return
-
-        print('on_silder_grabed', grabbed)
 
         opacity = 0.0 if grabbed else 1.0
 
