@@ -314,6 +314,7 @@ class Creature(EventDispatcher):
         drag_const = 0.0000000001  # drag coeficcent * density of fluid
         # TODO cos/sine of angle?
         drag_force = body.velocity.rotated_degrees(180) * (body.velocity.get_length_sqrd() * self.cross_area * drag_const)
+        # TODO limit force here as in Gooey drag?
         self.phy_body.apply_impulse(drag_force)
 
         # Update visual position and rotation with information from physics Body

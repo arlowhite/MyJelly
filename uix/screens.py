@@ -343,7 +343,7 @@ class CreatureTweakScreen(AppScreen):
         self.__adjusting_slider = False
 
         # Mapping of part_name to its tweaks dictionary in the store structure
-        # value is tuple: (tweaks, tweaks_defaults, tweaks_validation)
+        # value is tuple: (tweaks, tweaks_defaults, tweaks_meta)
         self._store_tweaks = {}
 
         super(CreatureTweakScreen, self).__init__(**kwargs)
@@ -388,15 +388,15 @@ class CreatureTweakScreen(AppScreen):
                 part_store[constructor_path]['tweaks'] = tweaks
 
             try:
-                tweaks_validation = Constructor.tweaks_validation
+                tweaks_meta = Constructor.tweaks_meta
                 tweaks_defaults = Constructor.tweaks_defaults
             except AttributeError:
                 Logger.exception('Unable to create Tweaks screen for part %s', part_name)
                 continue
 
-            _store_tweaks[part_name] = (tweaks, tweaks_defaults, tweaks_validation)
+            _store_tweaks[part_name] = (tweaks, tweaks_defaults, tweaks_meta)
 
-            for tweak_name, options in tweaks_validation.viewitems():
+            for tweak_name, options in tweaks_meta.viewitems():
                 # 'push_factor': {'type': float, 'min': 0.05, 'max': 0.4, 'ui': 'Slider'}
                 if options.ui != 'Slider':
                     raise NotImplementedError('Only support Slider')
@@ -456,7 +456,7 @@ class CreatureTweakScreen(AppScreen):
         """SettingItems call panel.get_value"""
 
         # TODO think about this code design, this seems awkward...
-        tweaks, tweaks_defaults, tweaks_validation = self._store_tweaks[part_name]
+        tweaks, tweaks_defaults, tweaks_meta = self._store_tweaks[part_name]
 
         try:
             value = tweaks[tweak_name]
@@ -468,8 +468,8 @@ class CreatureTweakScreen(AppScreen):
 
     def set_value(self, part_name, tweak_name, value):
         # Logger.debug('set_value %s:%s=%s', part_name, tweak_name, value)
-        tweaks, tweaks_defaults, tweaks_validation = self._store_tweaks[part_name]
-        value = tweaks_validation[tweak_name].type(value)
+        tweaks, tweaks_defaults, tweaks_meta = self._store_tweaks[part_name]
+        value = tweaks_meta[tweak_name].type(value)
 
         # Update structure in store
         tweaks[tweak_name] = value
@@ -531,6 +531,7 @@ class CreatureTweakScreen(AppScreen):
         creature_id = self.creature_id
         store = load_jelly_storage(creature_id)
         self.creature = creature = construct_creature(store, pos=env.center)
+        creature.orient(0)
         env.add_creature(creature)
 
     def _creature_orient_update(self, dt):

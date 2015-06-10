@@ -484,7 +484,7 @@ class GooeyBodyPart(EventDispatcher):
 
 
 # could do constraints dict, but just put min, max in tuple for simplicity
-TweakInfo = namedtuple('TweakInfo', 'title desc type ui min max')
+TweakMeta = namedtuple('TweakInfo', 'title desc type ui min max')
 
 class JellyBell(Creature):
     """An animated Jelly bell Creature that uses a MeshAnimator to animate between an open
@@ -501,20 +501,23 @@ class JellyBell(Creature):
     # Using kivy properties?
     tweaks_defaults = {
         'push_factor': 0.2,
+        'backpush_fraction': 0.8,
         'rotation_offset_percent_radius': 0.3,
         # 'density': mass should be calculated from density and size
         'density': 1e-5
     }
 
     # Used to generate gui
-    tweaks_validation = {
-        'push_factor': TweakInfo(_('Push power'), _('How much the Jelly pushes with each pulse.'),
-                                 float, 'Slider', 0.05, 1.0),
-        'rotation_offset_percent_radius': TweakInfo(_('Rotation power'), _('How hard the Jelly turns.'),
+    tweaks_meta = {
+        'push_factor': TweakMeta(_('Push power'), _('How much the Jelly pushes with each pulse.'),
+                                 float, 'Slider', 0.02, 0.5),
+        'backpush_fraction': TweakMeta(_('Backwards push percentage'), _('How much the Jelly pushes backwards as the bell opens.'),
+                                         float, 'Slider', 0.0, 1.0),
+        'rotation_offset_percent_radius': TweakMeta(_('Rotation power'), _('How hard the Jelly turns.'),
                                                     float, 'Slider', 0.1, 1.0),
         # mass is simpler for user to understand
         # mass units per cubic volume (world coordinate units)
-        'density': TweakInfo(_('Mass'), _('How heavy the Jelly is.'),
+        'density': TweakMeta(_('Mass'), _('How heavy the Jelly is.'),
                              float, 'Slider', 1e-6, 1e-4)
     }
 
@@ -676,21 +679,17 @@ class JellyBell(Creature):
         return rightmost_dist
 
     # TODO change pulse speed according to throttle
-    #def orient
-
 
     def on_bell_animstep(self, meshanim, step):
         self._prev_bell_vertical_fraction = 0.0
         # Moving toward closed_bell is pushing
         self.bell_push_dir = self.mesh_animator.step_names[step] == 'closed_bell'
 
-
     def on_bell_vertical_fraction(self, meshanim, frac):
         """Called every time bell animation's vertical fraction changes
         1.0 is up and open all the way
         0.0 is down and closed all the way
         """
-
         tweaks = self.tweaks
         body = self.phy_body
         rot_vector = body.rotation_vector
@@ -705,7 +704,8 @@ class JellyBell(Creature):
         # impulse i think, since could rotate and would need to reset_forces and calc new each time anyway
 
         push_factor = tweaks['push_factor']
-        power = self.cross_area * v_diff * (push_factor if self.bell_push_dir else -0.8 * push_factor)
+        power = self.cross_area * v_diff * \
+                (push_factor if self.bell_push_dir else -tweaks['backpush_fraction'] * push_factor)
 
 
         # Apply impulse off-center to rotate
@@ -729,7 +729,8 @@ class JellyBell(Creature):
             abs_angle_diff = abs(angle_diff)
 
             if abs_angle_diff < 45:
-                offset_dist *= abs_angle_diff/ 45.0
+                # Reduce rotation push
+                offset_dist *= abs_angle_diff / 18.0
 
             # FIXME if for some reason, does not have enough angular velocity, this would cause
             # an oscillation around an angle without ever reaching target orienting angle
