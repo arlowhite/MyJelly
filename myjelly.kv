@@ -47,6 +47,10 @@
                     on_press: root.new_jelly()
 #                    on_press: app.open_screen('NewJellyScreen')
 
+                ActionButton:
+                    text: 'Settings'
+                    on_press: app.open_settings()
+
 
         # TODO Gridlayout for bigger screens?
         # TODO List selection stuff instead?
@@ -79,6 +83,17 @@
         pos: root.pos
         size: root.size
 
+<PartTweakScreen>:
+    ScrollView:
+        GridLayout:
+        # GridLayout seems to be the only one that calculates the size of children
+            id: tweaks_container
+            cols: 1
+            size_hint_y: None
+            height: self.minimum_height
+            orientation: 'vertical'
+        # Proper selection list instead?
+
 <CreatureTweakScreen>:
     BoxLayout:
         orientation: 'vertical'
@@ -94,29 +109,22 @@
                     # FIXME Manage previous button
                     on_press: app.open_screen('JellyDesignScreen', {'jelly_id': root.creature_id})
 
+                ActionGroup:
+                    id: tweaks_part_selector
+                    mode: 'spinner'
+
         FloatLayout:
             id: content_layout
 
-            # In RelativeLayout so panel can be slid around
-            RelativeLayout:
-                id: tweaks_layout
+            ScreenManager:
+                id: tweaks_screen_manager
+                # default SlideTransition is the only one that doesn't obscure Jelly
                 size_hint: None, 1.0
-#                width: parent.width - slider.width
                 width: content_layout.width - slider.width
 
-                ScrollView:
-                    GridLayout:
-                    # GridLayout seems to be the only one that calculates the size of children
-                        id: tweaks_container
-                        cols: 1
-                        size_hint_y: None
-                        height: self.minimum_height
-                    # Proper selection list?
-                        orientation: 'vertical'
-
-#                        canvas:
-#                            Line:
-#                                rectangle: 0, 0, self.width, self.height
+#                canvas:
+#                    Line:
+#                        rectangle: 0, 0, self.width, self.height
 
             Button:  # Maybe ActionButton instead?
                 id: reset_button

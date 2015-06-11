@@ -32,7 +32,7 @@ def not_none_keywords(*not_none_args):
             for var_name in not_none_args:
                 try:
                     if kwargs[var_name] is None:
-                        raise AssertionError('{} is None!'.format(var_name))
+                        raise AssertionError('Required keyword argument "{}" is None!'.format(var_name))
 
                 except KeyError:
                     raise AssertionError('Required keyword not specified: {}'.format(var_name))

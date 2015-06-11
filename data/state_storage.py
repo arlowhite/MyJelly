@@ -237,13 +237,14 @@ def construct_creature(store, **merge_kwargs):
 
     Logger.debug('state_storage: construct_creature() id=%s, constructors=%s', creature_id, constructor_names)
 
-    merge_kwargs.update({'creature_id': creature_id})
-    creature = construct_value(store[constructor_names[0]], **merge_kwargs)
+    creature_part_name = constructor_names[0]
+    merge_kwargs.update({'creature_id': creature_id, 'part_name': creature_part_name})
+    creature = construct_value(store[creature_part_name], **merge_kwargs)
 
     creature_parts = store.keys()
     for name in constructor_names[1:]:
         if name in creature_parts:
-            construct_value(store[name], creature=creature)
+            construct_value(store[name], creature=creature, part_name=name)
         else:
             Logger.debug('Creature %s missing part structure "%s"', creature_id, name)
 

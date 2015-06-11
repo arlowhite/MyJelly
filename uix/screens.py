@@ -2,14 +2,16 @@ __author__ = 'awhite'
 
 import os.path as P
 import random
+from functools import partial
 
-from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
+from kivy.uix.screenmanager import Screen
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.utils import platform
 from kivy.logger import Logger, LOG_LEVELS
 from kivy.properties import StringProperty, ObjectProperty, BooleanProperty
 from kivy.animation import Animation
+from kivy.uix.actionbar import ActionButton
 from kivy.uix.settings import Settings
 
 import cymunk as phy
@@ -321,8 +323,38 @@ class TweakSettingItem(SettingItem):
     """Tweak setting menu item
     """
 
+class PartTweakScreen(Screen):
+    """Lists the Tweak selection for a part
+    """
 
+    selected = ObjectProperty(None)
 
+    @property
+    def tweaks(self):
+        return self.ids.tweaks_container.children
+
+    def add_tweak(self, widget):
+        tweaks_container = self.ids.tweaks_container
+        widget.size_hint_y = None
+        widget.size_hint_x = 1.0
+        tweaks_container.add_widget(widget)
+        widget.bind(on_release=self._child_on_release)
+
+    def clear_tweaks(self, animate=True):
+        tweaks_container = self.ids.tweaks_container
+
+        if not tweaks_container.children:
+            return
+
+        tweaks_container.clear_widgets()
+
+        # May get screwed up by on_size? but that probably won't be an issue
+        # anim = Animation(x=tweaks_container.x - tweaks_container.width, duration=0.5)
+        # for child in tweaks_container.children:
+        #     anim.start(child)
+
+    def _child_on_release(self, setting_item):
+        self.selected = setting_item
 
 class CreatureTweakScreen(AppScreen):
     """Shows creature moving behind screen with various tweaks to adjust the body parts
@@ -344,7 +376,10 @@ class CreatureTweakScreen(AppScreen):
 
         # Mapping of part_name to its tweaks dictionary in the store structure
         # value is tuple: (tweaks, tweaks_defaults, tweaks_meta)
+        # keys entered by _create_tweaks_screen
         self._store_tweaks = {}
+        # Mapping of part_name to its Constructor Class
+        self._part_classes = {}
 
         super(CreatureTweakScreen, self).__init__(**kwargs)
 
@@ -357,8 +392,6 @@ class CreatureTweakScreen(AppScreen):
             self.initialize()
 
     def initialize(self):
-        self._initialized = True
-
         creature_id = self.creature_id
         self.creature_store = store = load_jelly_storage(creature_id)
         constrs = store['info']['creature_constructors']
@@ -368,54 +401,95 @@ class CreatureTweakScreen(AppScreen):
         slider = self.ids.slider
         slider.bind(value=self.on_slider_value)
 
+        # ActionGroup spinner
+        tweaks_selector = self.ids.tweaks_part_selector
+
         for part_name in constrs:
             # FIXME instead add parts to menu and trigger on_select current part_name
 
             if part_name not in store:
                 # part not edited yet
+                # TODO maybe show entry with message that links back to construction
                 continue
 
             part_store = store[part_name]
-            Constructor, constructor_path, _ = lookup_constructable(part_store)
+            part_class, constructor_path, _ = lookup_constructable(part_store)
+            self._part_classes[part_name] = part_class
 
-            Logger.debug('Generating tweaks screen for part %s', part_name)
-
-            # Look for tweaks keywordarg in Constructor structure
-            try:
-                tweaks = part_store[constructor_path]['tweaks']
-            except KeyError:
-                tweaks = {}
-                part_store[constructor_path]['tweaks'] = tweaks
-
-            try:
-                tweaks_meta = Constructor.tweaks_meta
-                tweaks_defaults = Constructor.tweaks_defaults
-            except AttributeError:
-                Logger.exception('Unable to create Tweaks screen for part %s', part_name)
-                continue
-
-            _store_tweaks[part_name] = (tweaks, tweaks_defaults, tweaks_meta)
-
-            for tweak_name, options in tweaks_meta.viewitems():
-                # 'push_factor': {'type': float, 'min': 0.05, 'max': 0.4, 'ui': 'Slider'}
-                if options.ui != 'Slider':
-                    raise NotImplementedError('Only support Slider')
+            button = ActionButton(text=part_class.part_title)
+            button.bind(on_press=partial(self.display_part_tweaks, part_name))
+            tweaks_selector.add_widget(button)
 
 
-
-                # widget = TweakSetting(title=tweak_name)
-                widget = TweakSettingItem(title=options.title, section=part_name, panel=self, key=tweak_name,
-                                          desc=options.desc)
-
-                widget.tweak_options = options
-
-                widget.bind(on_release=self._child_on_release)
-                self.add_tweak(widget)
+        self.display_part_tweaks(constrs[0])
 
         Clock.schedule_once(self._create_creature_env, 0)
+        self._initialized = True
 
-    def _child_on_release(self, setting_item):
-        self.selected = setting_item
+    def display_part_tweaks(self, part_name, button=None):
+        """Display the tweaks screen for the specified part_name.
+        Note: button supplied when called via on_press event
+        """
+        if button:
+            part_selector = self.ids.tweaks_part_selector
+            if part_selector._dropdown:
+                part_selector._dropdown.dismiss()
+            else:
+                Logger.warning('%s: display_part_tweaks called with button, but no dropdown to dismiss.',
+                               self.__class__.__name__)
+
+        # Update the ActionGroup spinner text
+        part_class = self._part_classes[part_name]
+        self.ids.tweaks_part_selector.text = part_class.part_title
+
+        sm = self.ids.tweaks_screen_manager
+        if sm.has_screen(part_name):
+            sm.current = part_name
+
+        else:
+            screen = self._create_tweaks_screen(part_name)
+            sm.add_widget(screen)
+            sm.current = part_name
+
+    def _create_tweaks_screen(self, part_name):
+        Logger.debug('Generating tweaks screen for part %s', part_name)
+
+        part_store = self.creature_store[part_name]
+        part_class = self._part_classes[part_name]
+        constructor_path = part_class.class_path
+
+        # Look for tweaks keywordarg in Constructor structure
+        try:
+            tweaks = part_store[constructor_path]['tweaks']
+        except KeyError:
+            tweaks = {}
+            part_store[constructor_path]['tweaks'] = tweaks
+
+        try:
+            tweaks_meta = part_class.tweaks_meta
+            tweaks_defaults = part_class.tweaks_defaults
+        except AttributeError:
+            Logger.exception('Unable to create Tweaks screen for part %s', part_name)
+            raise
+
+        self._store_tweaks[part_name] = (tweaks, tweaks_defaults, tweaks_meta)
+
+        screen = PartTweakScreen(name=part_name)
+
+        for tweak_name, options in tweaks_meta.viewitems():
+            # 'push_factor': {'type': float, 'min': 0.05, 'max': 0.4, 'ui': 'Slider'}
+            if options.ui != 'Slider':
+                raise NotImplementedError('Only support Slider')
+
+            # widget = TweakSetting(title=tweak_name)
+            widget = TweakSettingItem(title=options.title, section=part_name, panel=self, key=tweak_name,
+                                      desc=options.desc)
+
+            widget.tweak_options = options
+            screen.add_tweak(widget)
+
+        screen.bind(selected=self.setter('selected'))
+        return screen
 
     def _create_creature_env(self, dt):
         self.creature_env = env = BasicEnvironment()
@@ -475,7 +549,7 @@ class CreatureTweakScreen(AppScreen):
         tweaks[tweak_name] = value
 
         if self.creature:
-            self.creature.set_tweak(tweak_name, value)
+            self.creature.adjust_part_tweak(part_name, tweak_name, value)
 
     def save_state(self):
         if Logger.isEnabledFor(LOG_LEVELS['debug']):
@@ -499,8 +573,9 @@ class CreatureTweakScreen(AppScreen):
 
         opacity = 0.0 if grabbed else 1.0
 
+        sm = self.ids.tweaks_screen_manager
         selected = self.selected
-        not_selected = [x for x in self.ids.tweaks_container.children if x is not selected]
+        not_selected = [x for x in sm.current_screen.tweaks if x is not selected]
         for w in not_selected:
             Animation(opacity=opacity, duration=0.2).start(w)
 
@@ -514,12 +589,6 @@ class CreatureTweakScreen(AppScreen):
     def on_touch_up(self, touch):
         if self.ids.slider not in touch.grab_list:
             self.slider_grabbed = False
-
-    def add_tweak(self, widget):
-        tweaks_container = self.ids.tweaks_container
-        widget.size_hint_y = None
-        widget.size_hint_x = 1.0
-        tweaks_container.add_widget(widget)
 
     def reset_creature(self, *args):
         # Just remove and create a new creature

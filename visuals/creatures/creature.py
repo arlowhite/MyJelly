@@ -1,12 +1,11 @@
 __author__ = 'awhite'
 
-import random
 from math import cos, sin, radians, degrees, pi
 from weakref import ref as weakref_ref
 
 from kivy.logger import Logger
-from kivy.graphics import Rectangle, Triangle, Color, Rotate, Translate, InstructionGroup, PushMatrix, PopMatrix, \
-    PushState, PopState, Canvas, Mesh, Scale, Ellipse, Line, ClearColor
+from kivy.graphics import Rectangle, Triangle, Color, Rotate, Translate, PushMatrix, PopMatrix, \
+    PushState, PopState, Canvas, Scale, Line
 from kivy.event import EventDispatcher
 from kivy.properties import NumericProperty, BoundedNumericProperty, BooleanProperty
 from kivy.metrics import mm, dp
@@ -14,9 +13,7 @@ from kivy.metrics import mm, dp
 import cymunk as phy
 from cymunk import Vec2d
 
-from ..drawn_visual import ControlPoint
-from ..animations import MeshAnimator, setup_step
-from misc.exceptions import InsufficientData
+from misc.util import not_none_keywords
 
 
 def fix_angle(angle):
@@ -51,14 +48,13 @@ class Creature(EventDispatcher):
 
     mass = NumericProperty(1.0e6)
 
-    def __init__(self, creature_id=None, tweaks=None, **kwargs):
-
-        if creature_id is None:
-            raise AssertionError('creature_id must be provided!')
+    @not_none_keywords('creature_id', 'part_name')
+    def __init__(self, creature_id=None, part_name=None, tweaks=None, **kwargs):
 
         super(Creature, self).__init__(**kwargs)
 
         self.creature_id = creature_id
+        self.part_name = part_name
 
         # All creatures will have a tweaks dictionary of various values that
         # change behaviour
@@ -100,7 +96,8 @@ class Creature(EventDispatcher):
         self.phy_body.velocity_limit = 1000  # TODO units?
 
         # Composite body parts that update every tick
-        self.body_parts = []
+        # Mapping part_name -> BodyPart
+        self.__body_parts = {}
 
         # Set properties that will be used within draw()
         # pos and angle are stored in the physics objects
@@ -171,10 +168,14 @@ class Creature(EventDispatcher):
     def on_mass(self, o, mass):
         self.phy_body.mass = mass
 
+    @property
+    def body_parts(self):
+        return self.__body_parts.values()
+
     def add_body_part(self, part):
         """Add a body part to this Creature and attach it the the physics space
         if the Creature is bound to an environment"""
-        self.body_parts.append(part)
+        self.__body_parts[part.part_name] = part
 
 
         if self.environment_wref:  # Bound to environment
@@ -365,6 +366,16 @@ class Creature(EventDispatcher):
         # Needed at all?
         # update_creature()
 
+    def adjust_part_tweak(self, part_name, tweak_name, value):
+        if self.part_name == part_name:
+            part = self
+        else:
+            part = self.__body_parts[part_name]
+
+        if hasattr(part, 'adjust_tweak'):
+            part.adjust_tweak(tweak_name, value)
+        else:
+            part.tweaks[tweak_name] = value
 
     # TODO this should be done differently, think about AOP/Component oriented programming
     def set_behavior(self, b):

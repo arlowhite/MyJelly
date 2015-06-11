@@ -29,6 +29,9 @@ from .creature import Creature
 
 ChainNode = namedtuple('ChainNode', ['shape', 'body', 'ellipse', 'constraints'])
 
+# could do constraints dict, but just put min, max in tuple for simplicity
+TweakMeta = namedtuple('TweakInfo', 'title desc type ui min max')
+
 # Doesn't seem to have effect regardless of value, don't think this applies to springs, only hard connections
 SPRING_MAX_FORCE = 1e6
 # TODO max_bias?
@@ -39,6 +42,17 @@ class GooeyBodyPart(EventDispatcher):
     and stiffer center skeleton"""
 
     class_path = 'visuals.creatures.jelly.GooeyBodyPart'
+    part_title = _('Tentacles')  # TODO rename? gooey blob, what?
+
+    tweaks_defaults = {
+        'mass_fraction': 0.5
+    }
+
+    # Used to generate gui
+    tweaks_meta = {
+        'mass_fraction': TweakMeta(_('Mass fraction'), _('Mass as percentage of bell.'),  # TODO better diction
+                                 float, 'Slider', 0.01, 3.0)  # TODO show %
+    }
 
     mass = BoundedNumericProperty(1.0, min=1.0)
 
@@ -70,8 +84,8 @@ class GooeyBodyPart(EventDispatcher):
             anim_constr.mesh_mode = data['mesh_mode']
             anim_constr.setup_control_points(data['vertices'])
 
-    @not_none_keywords('creature', 'image_filepath', 'vertices', 'indices')
-    def __init__(self, creature=None, image_filepath=None, mesh_mode='triangle_fan',
+    @not_none_keywords('creature', 'image_filepath', 'vertices', 'indices', 'part_name')
+    def __init__(self, creature=None, part_name=None, image_filepath=None, mesh_mode='triangle_fan',
                  vertices=None, indices=None, tweaks=None,
                  mass=100, stiffness=10, damping=5):
         # FIXME move mass, stiffness, etc to tweaks
@@ -88,6 +102,7 @@ class GooeyBodyPart(EventDispatcher):
             tweaks = {}
 
         self.tweaks = tweaks
+        self.part_name = part_name
 
         mesh_mode = str(mesh_mode)  # Mesh.mode does not support unicode
         if mesh_mode != 'triangle_fan':
@@ -114,7 +129,7 @@ class GooeyBodyPart(EventDispatcher):
 
         # Mass
         # TODO make fraction of bell a tweak
-        tentacles_total_mass = 0.5 * creature_phy_body.mass
+        tentacles_total_mass = tweaks['mass_fraction'] * creature_phy_body.mass
         self.mass = tentacles_total_mass
         center_chain_mass = 0.5 * tentacles_total_mass
         outer_chain_mass = tentacles_total_mass - center_chain_mass
@@ -479,12 +494,13 @@ class GooeyBodyPart(EventDispatcher):
 
     def on_creature_mass(self, o, mass):
         "Update all bodies mass"
-        # TODO 0.5 from tweak
-        self.mass = 0.5 * mass
+        self.mass = self.tweaks['mass_fraction'] * mass
 
+    def adjust_tweak(self, name, value):
+        self.tweaks[name] = value
+        if name == 'mass_fraction':
+            self.mass = value * self.creature.mass
 
-# could do constraints dict, but just put min, max in tuple for simplicity
-TweakMeta = namedtuple('TweakInfo', 'title desc type ui min max')
 
 class JellyBell(Creature):
     """An animated Jelly bell Creature that uses a MeshAnimator to animate between an open
@@ -495,6 +511,7 @@ class JellyBell(Creature):
     # So it's much easier to hard-code the knowledge of bell pulses, tentacle drift, etc.
 
     class_path = 'visuals.creatures.jelly.JellyBell'
+    part_title = _('Jelly Bell')
 
     # FIXME where to set min/max
     # Here in data
@@ -588,7 +605,7 @@ class JellyBell(Creature):
         vec.rotate_degrees(self.angle - 90)
         return vec + Vec2d(*self.pos)
 
-    def set_tweak(self, name, value):
+    def adjust_tweak(self, name, value):
         self.tweaks[name] = value
         if name == 'density':
             self.mass = value * self.volume
