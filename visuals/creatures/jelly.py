@@ -45,13 +45,19 @@ class GooeyBodyPart(EventDispatcher):
     part_title = _('Tentacles')  # TODO rename? gooey blob, what?
 
     tweaks_defaults = {
-        'mass_fraction': 0.5
+        'mass_fraction': 0.5,
+        'center_mass_fraction': 0.5
     }
 
     # Used to generate gui
     tweaks_meta = {
         'mass_fraction': TweakMeta(_('Mass fraction'), _('Mass as percentage of bell.'),  # TODO better diction
-                                 float, 'Slider', 0.01, 3.0)  # TODO show %
+                                   float, 'Slider', 0.01, 3.0),  # TODO show %
+
+        'center_mass_fraction': TweakMeta(_('Center Mass fraction'),
+                                          _('The percentage of the tentacle mass located at the center.'),
+                                          float, 'Slider', 0.05, 0.95)
+
     }
 
     mass = BoundedNumericProperty(1.0, min=1.0)
@@ -102,7 +108,17 @@ class GooeyBodyPart(EventDispatcher):
             tweaks = {}
 
         self.tweaks = tweaks
+        # TODO common tweaks code
+        for tweak_name, value in self.tweaks_defaults.viewitems():
+            if tweak_name not in tweaks:
+                Logger.debug('%s missing tweak "%s" setting default value %s', self.__class__.__name__,
+                             tweak_name, value)
+                tweaks[tweak_name] = value
+
         self.part_name = part_name
+
+        # Mapping of ChainNode bodies to their natural distance from creature.pos
+        self.__body_distance = {}
 
         mesh_mode = str(mesh_mode)  # Mesh.mode does not support unicode
         if mesh_mode != 'triangle_fan':
@@ -130,9 +146,6 @@ class GooeyBodyPart(EventDispatcher):
         # Mass
         # TODO make fraction of bell a tweak
         tentacles_total_mass = tweaks['mass_fraction'] * creature_phy_body.mass
-        self.mass = tentacles_total_mass
-        center_chain_mass = 0.5 * tentacles_total_mass
-        outer_chain_mass = tentacles_total_mass - center_chain_mass
 
         ### Outer Chain ###
         # TODO Prevent Mesh triangles from flipping somehow
@@ -158,8 +171,7 @@ class GooeyBodyPart(EventDispatcher):
             translated_vertices.extend((xy.x, xy.y, vertices[i+2], vertices[i+3]))
 
         self.outer_chain = outer_chain = self._create_chain(positions, canvas_after, loop_around=True,
-                                                            radius=dp(10),
-                                                            mass=outer_chain_mass/len(positions))
+                                                            radius=dp(10))
 
 
         ### Pin Points ###
@@ -228,7 +240,7 @@ class GooeyBodyPart(EventDispatcher):
         positions = [jelly_pos + backwards_vec * dist_creature_to_goocenter]
 
         self.center_chain = center_chain = self._create_chain(positions, canvas_after,
-                                                              radius=radius, mass=center_chain_mass / len(positions),
+                                                              radius=radius,
                                                               stiffness=stiffness * 10, damping=damping * 10,
                                                               phy_group_num=creature.phy_group_num)
 
@@ -257,9 +269,9 @@ class GooeyBodyPart(EventDispatcher):
 
         self.chains = (center_chain, outer_chain)
 
-        self._store_body_masses()
         creature.bind(mass=self.on_creature_mass)
         self.bind(mass=self.on_mass_changed)
+        self.mass = tentacles_total_mass
 
         ### Setup Mesh ###
 
@@ -286,25 +298,42 @@ class GooeyBodyPart(EventDispatcher):
 
         creature.add_body_part(self)
 
-    # TODO maybe move these to BodyPart subclass as well? Research metaclasses
-    def _store_body_masses(self):
-        """Store a mapping of each body to its percentage of the overall mass so
-        that mass can be dynamically updated without excesive calculation."""
-        # Map Body -> percent_mass
-        self._body_masses = body_masses = {}
-        total_mass = self.mass
-
-        for chain in self.chains:
-            for node in chain:
-                body_masses[node.body] = node.body.mass / total_mass
-
     def on_mass_changed(self, o, mass):
-        """Distribute the mass among all bodies as recorded in _store_body_masses
+        """Distribute the mass among all bodies according to tweaks
         """
 
+        # This code assumes center_chain and outer
+        # If various chains required, should subclass this
+        # Base (1 outer chain, cross linked), This Class, etc..
+        if __debug__:
+            assert len(self.chains) == 2
+            assert self.outer_chain in self.chains
+            assert self.center_chain in self.chains
+
         Logger.trace('%s: on_mass_changed(%s)', self.__class__.__name__, mass)
-        for body, portion in self._body_masses.viewitems():
-            body.mass = portion * mass
+
+        tweaks = self.tweaks
+        center_chain_mass = tweaks['center_mass_fraction'] * mass
+        outer_chain_mass = mass - center_chain_mass
+
+        center_chain = self.center_chain
+        outer_chain = self.outer_chain
+
+        farthest_dist = max(self.__body_distance.values())
+
+        # TODO balance left-right mass?
+        for chain_mass, chain in ((center_chain_mass, center_chain),
+                                  (outer_chain_mass, outer_chain)):
+            body_mass = chain_mass / len(chain)
+
+            for node in chain:
+                body = node.body
+                dist = self.__body_distance[body]
+
+                # FIXME this equation doesn't maintain the total mass
+                m = body_mass * (dist / farthest_dist) ** 2.0 + 0.2 * body_mass
+                body.mass = m
+                body.moment = moment_for_circle(m, 0, node.shape.radius)
 
 
     # FIXME prevent double connections if chain1 is chain2
@@ -339,17 +368,14 @@ class GooeyBodyPart(EventDispatcher):
         prev = None
 
         debug_visuals = self.creature.debug_visuals
-        mypos = self.jelly.phy_body.position
-        farthest_dist = max(pos.get_distance(mypos) for pos in positions)
+        creature_pos = self.jelly.phy_body.position
 
         center_chain = []
         for pos in positions:
             # mass falls with distance from jelly
-            dist = mypos.get_distance(pos)
-            m = mass * (dist / farthest_dist)**2.0 + 0.2 * mass
-
-            moment = moment_for_circle(m, 0, radius)
-            body = Body(m, moment)
+            body = Body(mass, moment_for_circle(mass, 0, radius))
+            dist = creature_pos.get_distance(pos)
+            self.__body_distance[body] = dist
             shape = Circle(body, radius)
             shape.friction = 0.4
             shape.elasticity = 0.3
@@ -357,7 +383,7 @@ class GooeyBodyPart(EventDispatcher):
                 shape.group = phy_group_num
 
             body.position = pos
-            Logger.debug("Creating chain body mass=%s position=%s radius=%s", m, pos, radius)
+            Logger.debug("Creating chain body mass=%s position=%s radius=%s", mass, pos, radius)
 
             if debug_visuals:
                 e = Ellipse(pos=(body.position.x - radius, body.position.y - radius), size=(radius * 2.0, radius * 2.0))
@@ -500,6 +526,9 @@ class GooeyBodyPart(EventDispatcher):
         self.tweaks[name] = value
         if name == 'mass_fraction':
             self.mass = value * self.creature.mass
+
+        elif name == 'center_mass_fraction':
+            self.on_mass_changed(self, self.mass)
 
 
 class JellyBell(Creature):
