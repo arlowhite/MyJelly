@@ -27,7 +27,9 @@ from misc.util import not_none_keywords
 from misc.physics_util import world_pos_of_offset, offset_to_pos
 from .creature import Creature
 
-ChainNode = namedtuple('ChainNode', ['shape', 'body', 'ellipse', 'constraints'])
+ChainNode = namedtuple('ChainNode', ['shape', 'body', 'ellipse', 'perimeter_spring', 'internal_springs'])
+# Fields that may be None and are physics objects
+optional_chain_node_physics_fields = ('shape', 'perimeter_spring', 'internal_springs')
 
 # could do constraints dict, but just put min, max in tuple for simplicity
 TweakMeta = namedtuple('TweakInfo', 'title desc type ui min max')
@@ -45,8 +47,13 @@ class GooeyBodyPart(EventDispatcher):
     part_title = _('Tentacles')  # TODO rename? gooey blob, what?
 
     tweaks_defaults = {
+        # TODO evaluate defaults
         'mass_fraction': 0.5,
-        'center_mass_fraction': 0.5
+        'center_mass_fraction': 0.5,
+        'outer_spring_stiffness': 50,
+        'outer_spring_damping': 15,
+        'internal_spring_stiffness': 50,
+        'internal_spring_damping': 15
     }
 
     # Used to generate gui
@@ -56,7 +63,23 @@ class GooeyBodyPart(EventDispatcher):
 
         'center_mass_fraction': TweakMeta(_('Center Mass fraction'),
                                           _('The percentage of the tentacle mass located at the center.'),
-                                          float, 'Slider', 0.05, 0.95)
+                                          float, 'Slider', 0.05, 0.95),
+
+        'outer_spring_stiffness': TweakMeta(_('Outer spring stiffness'),
+                                            _('How stiff the perimeter springs are.'),
+                                            float, 'Slider', 0.1, 100),
+
+        'outer_spring_damping': TweakMeta(_('Outer spring damping'),
+                                          _('The damping amount in the perimeter springs.'),
+                                          float, 'Slider', 0.1, 100),
+
+        'internal_spring_stiffness': TweakMeta(_('Internal spring stiffness'),
+                                            _('How stiff the springs connecting the perimeter and interior are.'),
+                                            float, 'Slider', 0.1, 100),
+
+        'internal_spring_damping': TweakMeta(_('Internal spring damping'),
+                                          _('The damping amount for springs connecting the perimeter and interior.'),
+                                          float, 'Slider', 0.1, 100)
 
     }
 
@@ -92,9 +115,7 @@ class GooeyBodyPart(EventDispatcher):
 
     @not_none_keywords('creature', 'image_filepath', 'vertices', 'indices', 'part_name')
     def __init__(self, creature=None, part_name=None, image_filepath=None, mesh_mode='triangle_fan',
-                 vertices=None, indices=None, tweaks=None,
-                 mass=100, stiffness=10, damping=5):
-        # FIXME move mass, stiffness, etc to tweaks
+                 vertices=None, indices=None, tweaks=None):
 
         num_vertices = len(vertices)
 
@@ -139,8 +160,9 @@ class GooeyBodyPart(EventDispatcher):
 
         canvas_after = creature.canvas.after
 
-        stiffness = 10
-        damping = 5
+        stiffness = tweaks['outer_spring_stiffness']
+        damping = tweaks['outer_spring_damping']
+        # FIXME NOW finish up spring tweaks, drag tweaks
         creature_radius = creature.phy_shape.radius  # FIXME assumes Circle shape
 
         # Mass
@@ -171,7 +193,7 @@ class GooeyBodyPart(EventDispatcher):
             translated_vertices.extend((xy.x, xy.y, vertices[i+2], vertices[i+3]))
 
         self.outer_chain = outer_chain = self._create_chain(positions, canvas_after, loop_around=True,
-                                                            radius=dp(10))
+                                                            radius=dp(10), stiffness=stiffness, damping=damping)
 
 
         ### Pin Points ###
@@ -193,7 +215,8 @@ class GooeyBodyPart(EventDispatcher):
 
         # Constraint anchor offset needs to be relative to the creature orientation
         spring = PinJoint(creature_phy_body, closest_body, (anchor_offset.x, anchor_offset.y), (0, 0))
-        closest.constraints.append(spring)
+        # TODO separate field for PinJoint?
+        closest.internal_springs.append(spring)
 
         # FIXME Setup groups some other way, Need to detect points that start inside
         assert creature.phy_group_num != 0  # must be nonzero to work
@@ -209,7 +232,7 @@ class GooeyBodyPart(EventDispatcher):
         anchor_offset = offset_to_pos(creature_phy_body, closest_body.position)
 
         spring = PinJoint(creature_phy_body, closest_body, (anchor_offset.x, anchor_offset.y), (0, 0))
-        closest.constraints.append(spring)
+        closest.internal_springs.append(spring)
 
         # FIXME Setup groups some other way, Need to detect points that start inside
         closest.shape.group = creature.phy_group_num
@@ -239,9 +262,9 @@ class GooeyBodyPart(EventDispatcher):
         dist_creature_to_goocenter = jelly_pos.get_distance((cent_pos_x, cent_pos_y))
         positions = [jelly_pos + backwards_vec * dist_creature_to_goocenter]
 
+        # With 1 position, no springs will actually be created
         self.center_chain = center_chain = self._create_chain(positions, canvas_after,
                                                               radius=radius,
-                                                              stiffness=stiffness * 10, damping=damping * 10,
                                                               phy_group_num=creature.phy_group_num)
 
         first = center_chain[0]
@@ -254,7 +277,7 @@ class GooeyBodyPart(EventDispatcher):
         spring = DampedSpring(creature_phy_body, first.body, anchor, (0, 0),
                               rest_length, stiffness, damping)
         spring.max_force = SPRING_MAX_FORCE
-        first.constraints.append(spring)
+        first.internal_springs.append(spring)
 
         anchor = (0, -offset_dist)
         offset_world_vec = world_pos_of_offset(creature_phy_body, anchor)
@@ -262,10 +285,11 @@ class GooeyBodyPart(EventDispatcher):
         spring = DampedSpring(creature_phy_body, first.body, anchor, (0, 0),
                               rest_length, stiffness, damping)
         spring.max_force = SPRING_MAX_FORCE
-        first.constraints.append(spring)
+        first.internal_springs.append(spring)
 
         # Link outer chain with center
-        self._cross_link(outer_chain, center_chain, stiffness=stiffness*1.0, damping=damping*1.0)
+        self._cross_link(outer_chain, center_chain, stiffness=tweaks['internal_spring_stiffness'],
+                         damping=tweaks['internal_spring_damping'])
 
         self.chains = (center_chain, outer_chain)
 
@@ -338,7 +362,9 @@ class GooeyBodyPart(EventDispatcher):
 
     # FIXME prevent double connections if chain1 is chain2
     def _cross_link(self, chain1, chain2, stiffness=20, damping=10, connect_num=1):
-        """Connects springs with closest connect_num bodies from the other chain"""
+        """Connects springs with closest connect_num bodies from the other chain2
+        adds the created springs to chain1's nodes internal_springs
+        """
 
         for node1 in chain1:
             # get closest 2 points in other chain
@@ -355,7 +381,7 @@ class GooeyBodyPart(EventDispatcher):
                                           dist, stiffness, damping)
                 spring.max_force = SPRING_MAX_FORCE
 
-                node1.constraints.append(spring)
+                node1.internal_springs.append(spring)
 
     def _create_chain(self, positions, canvas, mass=1, radius=10, loop_around=False, stiffness=50, damping=15,
                       phy_group_num=None):
@@ -391,16 +417,15 @@ class GooeyBodyPart(EventDispatcher):
             else:
                 e = None
 
-            springs = []
+            spring = None
             if prev:
                 # attach spring to previous
                 dist_apart = prev[0].body.position.get_distance(body.position)
                 spring = DampedSpring(prev[0].body, body, (0, 0), (0, 0), dist_apart, stiffness,
                                           damping)
                 spring.max_force = SPRING_MAX_FORCE
-                springs.append(spring)
 
-            item = ChainNode(shape=shape, body=body, ellipse=e, constraints=springs)
+            item = ChainNode(shape=shape, body=body, ellipse=e, perimeter_spring=spring, internal_springs=[])
 
             center_chain.append(item)
 
@@ -408,12 +433,15 @@ class GooeyBodyPart(EventDispatcher):
 
         if loop_around:
             last_body = body
-            body = center_chain[0].body
-            dist_apart = last_body.position.get_distance(body.position)
-            spring = DampedSpring(last_body, body, (0, 0), (0, 0),
+            first_node = center_chain[0]
+            first_body = first_node.body
+            dist_apart = last_body.position.get_distance(first_body.position)
+            spring = DampedSpring(last_body, first_body, (0, 0), (0, 0),
                                       dist_apart, stiffness, damping)
             spring.max_force = SPRING_MAX_FORCE
-            center_chain[0].constraints.append(spring)
+            # Have to recreate because ChainNode is a tuple
+            center_chain[0] = ChainNode(shape=first_node.shape, body=first_body, ellipse=first_node.ellipse,
+                                        perimeter_spring=spring, internal_springs=[])
 
         return center_chain
 
@@ -492,10 +520,11 @@ class GooeyBodyPart(EventDispatcher):
         for chain in self.chains:
             for node in chain:
                 space.add(node.body)
-                if node.shape:
-                    space.add(node.shape)
-                if node.constraints:
-                    space.add(node.constraints)
+                for field in optional_chain_node_physics_fields:
+                    obj = getattr(node, field)
+                    if obj:
+                        # add/remove can handle lists i think
+                        space.add(obj)
 
     def unbind_physics_space(self, space):
         """Remove all physics objects that were added in bind_physics_space
@@ -505,10 +534,10 @@ class GooeyBodyPart(EventDispatcher):
         for chain in self.chains:
             for node in chain:
                 space.remove(node.body)
-                if node.shape:
-                    space.remove(node.shape)
-                if node.constraints:
-                    space.remove(node.constraints)
+                for field in optional_chain_node_physics_fields:
+                    obj = getattr(node, field)
+                    if obj:
+                        space.remove(obj)
 
     def translate(self, translation_vector):
         for chain in self.chains:
@@ -529,6 +558,32 @@ class GooeyBodyPart(EventDispatcher):
 
         elif name == 'center_mass_fraction':
             self.on_mass_changed(self, self.mass)
+
+        elif name == 'outer_spring_stiffness':
+            for node in self.outer_chain:
+                node.perimeter_spring.stiffness = value
+
+        elif name == 'outer_spring_damping':
+            for node in self.outer_chain:
+                node.perimeter_spring.damping = value
+
+        elif name == 'internal_spring_stiffness':
+            for node in self.outer_chain:
+                for spring in node.internal_springs:
+                    try:
+                        spring.stiffness = value
+                    except AttributeError:
+                        # PinJoints are put into internal_springs for now
+                        pass
+
+        elif name == 'internal_spring_damping':
+            for node in self.outer_chain:
+                for spring in node.internal_springs:
+                    try:
+                        spring.damping = value
+                    except AttributeError:
+                        pass
+
 
 
 class JellyBell(Creature):
