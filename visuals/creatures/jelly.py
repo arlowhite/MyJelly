@@ -270,6 +270,7 @@ class GooeyBodyPart(EventDispatcher):
         first = center_chain[0]
 
         # Create two spring connected to center offset sideways from creature center
+        # TODO make 45 degree angle instead?
         offset_dist = 0.5 * creature_radius
         anchor = (0, offset_dist)
         offset_world_vec = world_pos_of_offset(creature_phy_body, anchor)

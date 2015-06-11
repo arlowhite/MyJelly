@@ -49,7 +49,7 @@ class Creature(EventDispatcher):
     mass = NumericProperty(1.0e6)
 
     @not_none_keywords('creature_id', 'part_name')
-    def __init__(self, creature_id=None, part_name=None, tweaks=None, **kwargs):
+    def __init__(self, creature_id=None, part_name=None, tweaks=None, debug_visuals=False, **kwargs):
 
         super(Creature, self).__init__(**kwargs)
 
@@ -81,7 +81,7 @@ class Creature(EventDispatcher):
 
         self.tweaks = tweaks
 
-        self.debug_visuals = True  # TODO control with global config
+        self.debug_visuals = debug_visuals
 
         self.orienting = False  # is currently orienting toward orienting_angle
         self.orienting_angle = 0

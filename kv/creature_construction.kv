@@ -1,0 +1,194 @@
+#:kivy 1.9.0
+
+<JellyDesignScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+
+        ActionBar:
+            id: action_bar
+            size_hint_y: None
+
+            ActionView:
+
+                ActionPrevious:
+                    title: 'Jelly Designer'
+                    # FIXME Manage previous button
+                    on_press: app.open_screen('JellySelectionScreen')
+
+                ActionButton:
+                    text: 'Delete'  # TODO Confirmation
+                    on_press: root.delete_jelly()
+
+        BoxLayout:
+            orientation: 'vertical'
+
+# TODO generate Buttons based on creature_constructors rather than hardcoding here
+            Button:
+                text: 'Animate Bell'
+                on_press: app.open_screen('JellyAnimationConstructorScreen', {'jelly_id': root.jelly_id, 'part_name':'jelly_bell'})
+
+            Button:
+                text: 'Outline Tentacles'
+                on_press: app.open_screen('JellyAnimationConstructorScreen', {'jelly_id': root.jelly_id, 'part_name':'tentacles'})
+
+            Button:
+                text: 'Tweaks'
+                on_press: app.open_screen('CreatureTweakScreen', {'creature_id': root.jelly_id})
+
+
+<JellyAnimationConstructorScreen>:
+    id: screen
+
+    BoxLayout:
+        orientation: 'vertical'
+
+        ActionBar:
+            id: action_bar
+            top: root.top
+            size_hint_y: None
+
+            ActionView:
+
+                ActionPrevious:
+                    title: 'Jelly Animator'
+                    # FIXME Manage previous button
+                    on_press: app.open_screen('JellyDesignScreen', {'jelly_id': root.jelly_id})
+
+                ActionButton:
+                    icon: 'atlas://data/images/defaulttheme/previous_normal'
+                    #text: 'Closed Bell'
+#                    on_press: carousel.load_previous()
+#                    disabled: carousel.index == 0
+
+
+                ActionButton:
+                    icon: 'atlas://data/images/defaulttheme/previous_normal'
+#                    on_press: carousel.load_next()
+                    #on_texture: self.texture.flip_horizontal()
+                    #text: 'Closed Bell'
+#                    disabled: carousel.index == len(carousel.slides) - 1
+
+
+
+        BoxLayout:
+            orientation: 'vertical'
+
+            LabeledSpinner:
+                id: animation_step_spinner
+                # Darkens instruction text
+                #disabled: len(animation_constructor.ctrl_points) < 3
+                #loop: True
+                size_hint_y: None
+                size_hint_x: 0.8
+                pos_hint: {'center_x': 0.5}
+                #height: cm(1.0)
+                # TODO labels vs values? internationalization?
+                #text: 'Setup'
+                values: ('Setup', 'Open bell', 'Closed bell')
+                text_values: ('__setup__', 'open_bell', 'closed_bell')
+                text_value: '__setup__'
+                on_text_value: screen.animation_step = args[1]
+
+
+            FloatLayoutStencilView:
+
+                # Top/Bottom border
+                canvas.after:
+                    Color:
+                        rgba: 1, 1, 1, 0.7
+                    Line:
+                        rectangle: self.x - 1, self.y, self.width + 2, self.height
+
+                AnimationConstructor:
+                    id: animation_constructor
+
+                    # Unlock/Lock Scatter
+                    move_resize: move_resize_switch.active
+
+# Centered in code when data changes
+                    #pos: self.parent.pos
+                    #center: self.parent.center
+
+#                    animation_step: carousel.index
+
+                    # On step 0 un toggle
+
+
+            BoxLayout:
+                size_hint_y: None
+
+                Label:
+                    text: "Move and Resize (pinch)"
+
+                Switch:
+                    id: move_resize_switch
+                    size_hint_x: None
+
+                ToggleButton:
+                    id: animate_toggle
+                    text: "Animate"
+                    on_state: animation_constructor.preview_animation(self.state=='down')
+                    disabled: animation_constructor.animation_step == 0
+
+
+<AnimationConstructor>:
+    # Scatter outline
+#    canvas:
+#        # Shows scaled bounds
+#        Color:
+#            rgb: 0, 0, 1
+#        Line:
+#            rectangle: 0, 0, self.width, self.height
+#
+#        Color:
+#            rgba: 1,1,1,1
+#
+#    canvas.after:
+#        # Shows natural size (no-scaling)
+#        Color:
+#            rgb: 1, 0, 0
+#        Line:
+#            rectangle: self.x, self.y, self.width, self.height
+
+#        Color:
+#            rgb: 0, 1, 0
+#        Line:
+#            rectangle: self.bbox[0][0], self.bbox[0][1], self.bbox[1][0], self.bbox[1][0]
+
+    do_rotation: False
+    do_translation: False
+    do_scale: False
+
+    scale_min: 0.25
+    scale_max: 6.0
+    # Don't let parent re-size
+    size_hint: None, None
+    auto_bring_to_front: False
+    do_collide_after_children: False
+
+
+<ControlPoint>:
+    # For simplicity, pos is the center of the image, collide_point is not used
+    # This way pos does not need to change when scaling
+    natural_size: cm(1.0)
+    size: cm(1.0), cm(1.0)
+
+    canvas.before:
+        # For some reason doing Color programatically isn't working...
+        Color:
+            rgba: 42/255.0, 113/255.0, 182/255.0, 0.8
+        Line:
+            width: 1.0  # dp(1) way too fat on Nexus 10, not sure why.
+
+    Image:
+    # TODO Ring a bit thin
+        source: "media/images/crosshair.png"
+        pos: root.x - root.width/2.0, root.y - root.height/2.0
+        size: root.size
+        mipmap: True  # Looks much better with mipmap
+
+#    canvas:
+#        Rectangle:
+#            source: "media/images/crosshair.png"
+#            pos: self.x - self.width/2.0, self.y - self.height/2.0
+#            size: self.size

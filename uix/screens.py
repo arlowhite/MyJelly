@@ -365,6 +365,7 @@ class CreatureTweakScreen(AppScreen):
     creature_id = StringProperty()
     selected = ObjectProperty(None)
     slider_grabbed = BooleanProperty(False)
+    debug_visuals = BooleanProperty(False)
 
     creature_turning = BooleanProperty(False)
 
@@ -498,6 +499,10 @@ class CreatureTweakScreen(AppScreen):
         # Wait until initialized so that creature can be centered in parent
         env.bind(initialized=self.reset_creature)
 
+    def on_debug_visuals(self, o, debug):
+        # Not worth making debug_visuals dynamic, just create a new creature
+        self.reset_creature()
+
     def on_selected(self, _, setting_item):
         # Property ensures no duplicate calls for same menu item
         slider_opacity = 0.0 if setting_item is None else 1.0
@@ -599,7 +604,7 @@ class CreatureTweakScreen(AppScreen):
 
         creature_id = self.creature_id
         store = load_jelly_storage(creature_id)
-        self.creature = creature = construct_creature(store, pos=env.center)
+        self.creature = creature = construct_creature(store, pos=env.center, debug_visuals=self.debug_visuals)
         creature.orient(0)
         env.add_creature(creature)
 

@@ -1,0 +1,101 @@
+#:kivy 1.9.0
+
+<TweakSetting>:
+# BoxLayout
+    orientation: 'vertical'
+
+    Label:
+        id: title_label
+        text: root.title
+
+<PartTweakScreen>:
+    ScrollView:
+        GridLayout:
+        # GridLayout seems to be the only one that calculates the size of children
+            id: tweaks_container
+            cols: 1
+            size_hint_y: None
+            height: self.minimum_height
+            orientation: 'vertical'
+        # Proper selection list instead?
+
+
+<CreatureTweakScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+
+        ActionBar:
+            id: action_bar
+            size_hint_y: None
+
+            ActionView:
+
+                ActionPrevious:
+                    title: 'Jelly Tweaks'
+                    # FIXME Manage previous button
+                    on_press: app.open_screen('JellyDesignScreen', {'jelly_id': root.creature_id})
+
+                ActionGroup:
+                    id: tweaks_part_selector
+                    mode: 'spinner'
+
+        FloatLayout:
+            id: content_layout
+
+            ScreenManager:
+                id: tweaks_screen_manager
+                # default SlideTransition is the only one that doesn't obscure Jelly
+                size_hint: None, 1.0
+                width: content_layout.width - slider.width
+
+#                canvas:
+#                    Line:
+#                        rectangle: 0, 0, self.width, self.height
+            StackLayout:
+                orientation: 'rl-bt'
+                size_hint: None, None
+                width: content_layout.width - slider.width
+                height: self.minimum_height
+                spacing: dp(8), dp(2)
+
+                Button:  # Maybe ActionButton instead?
+                    id: reset_button
+                    text: 'Reset'
+                    size_hint: None, None
+                    # Use other buttons padding so values aren't set in two places.
+                    padding: turn_button.padding
+                    size: self.texture_size
+                    on_press: root.reset_creature()
+
+                TweakToggleButton:
+                    id: turn_button
+                    text: 'Turn'
+#                    size_hint: None, None
+#                    height: cm(1.5)
+                    on_state: root.creature_turning = self.state=='down'
+
+                TweakToggleButton:
+                    text: 'Visualize Physics'
+#                    size_hint: None, None
+#                    size_hint_x: cm(1.5)
+#                    height: cm(1.5)
+                    on_state: root.debug_visuals = self.state=='down'
+
+            Slider:
+                id: slider
+                orientation: 'vertical'
+                opacity: 0.0
+                size_hint_x: None
+                size_hint_y: 1.0
+                pos_hint_x: None
+                pos_hint_y: 0
+                x: root.right - self.width
+#                pos: 10, 10
+        #        anchor_x: 'right'
+        #        anchor_y: 'center'
+
+
+<TweakToggleButton@ToggleButton>:
+    size_hint: None, None
+    padding: dp(18), dp(12)
+    size: self.texture_size
