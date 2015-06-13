@@ -8,7 +8,7 @@ _ = gettext.lgettext
 
 import random
 from math import cos, sin, radians, degrees, pi
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 
 from kivy.logger import Logger
 from kivy.graphics import Color, Translate, PushMatrix, PopMatrix, \
@@ -57,31 +57,31 @@ class GooeyBodyPart(EventDispatcher):
     }
 
     # Used to generate gui
-    tweaks_meta = {
-        'mass_fraction': TweakMeta(_('Mass fraction'), _('Mass as percentage of bell.'),  # TODO better diction
-                                   float, 'Slider', 0.01, 3.0),  # TODO show %
+    tweaks_meta = OrderedDict((
+        ('mass_fraction', TweakMeta(_('Mass fraction'), _('Mass as percentage of bell.'),  # TODO better diction
+                                   float, 'Slider', 0.01, 3.0)),  # TODO show %
 
-        'center_mass_fraction': TweakMeta(_('Center Mass fraction'),
+        ('center_mass_fraction', TweakMeta(_('Center Mass fraction'),
                                           _('The percentage of the tentacle mass located at the center.'),
-                                          float, 'Slider', 0.05, 0.95),
+                                          float, 'Slider', 0.05, 0.95)),
 
-        'outer_spring_stiffness': TweakMeta(_('Outer spring stiffness'),
+        ('outer_spring_stiffness', TweakMeta(_('Outer spring stiffness'),
                                             _('How stiff the perimeter springs are.'),
-                                            float, 'Slider', 0.1, 100),
+                                            float, 'Slider', 0.1, 100)),
 
-        'outer_spring_damping': TweakMeta(_('Outer spring damping'),
+        ('outer_spring_damping', TweakMeta(_('Outer spring damping'),
                                           _('The damping amount in the perimeter springs.'),
-                                          float, 'Slider', 0.1, 100),
+                                          float, 'Slider', 0.1, 100)),
 
-        'internal_spring_stiffness': TweakMeta(_('Internal spring stiffness'),
+        ('internal_spring_stiffness', TweakMeta(_('Internal spring stiffness'),
                                             _('How stiff the springs connecting the perimeter and interior are.'),
-                                            float, 'Slider', 0.1, 100),
+                                            float, 'Slider', 0.1, 100)),
 
-        'internal_spring_damping': TweakMeta(_('Internal spring damping'),
+        ('internal_spring_damping', TweakMeta(_('Internal spring damping'),
                                           _('The damping amount for springs connecting the perimeter and interior.'),
-                                          float, 'Slider', 0.1, 100)
+                                          float, 'Slider', 0.1, 100))
 
-    }
+    ))
 
     mass = BoundedNumericProperty(1.0, min=1.0)
 
@@ -610,18 +610,18 @@ class JellyBell(Creature):
     }
 
     # Used to generate gui
-    tweaks_meta = {
-        'push_factor': TweakMeta(_('Push power'), _('How much the Jelly pushes with each pulse.'),
-                                 float, 'Slider', 0.02, 0.5),
-        'backpush_fraction': TweakMeta(_('Backwards push percentage'), _('How much the Jelly pushes backwards as the bell opens.'),
-                                         float, 'Slider', 0.0, 1.0),
-        'rotation_offset_percent_radius': TweakMeta(_('Rotation power'), _('How hard the Jelly turns.'),
-                                                    float, 'Slider', 0.1, 1.0),
+    tweaks_meta = OrderedDict((
+        ('push_factor', TweakMeta(_('Push power'), _('How much the Jelly pushes with each pulse.'),
+                                 float, 'Slider', 0.02, 0.5)),
+        ('backpush_fraction', TweakMeta(_('Backwards push percentage'), _('How much the Jelly pushes backwards as the bell opens.'),
+                                         float, 'Slider', 0.0, 1.0)),
+        ('rotation_offset_percent_radius', TweakMeta(_('Rotation power'), _('How hard the Jelly turns.'),
+                                                    float, 'Slider', 0.1, 1.0)),
         # mass is simpler for user to understand
         # mass units per cubic volume (world coordinate units)
-        'density': TweakMeta(_('Mass'), _('How heavy the Jelly is.'),
-                             float, 'Slider', 1e-6, 1e-4)
-    }
+        ('density', TweakMeta(_('Mass'), _('How heavy the Jelly is.'),
+                             float, 'Slider', 1e-6, 1e-4))
+    ))
 
     @not_none_keywords('image_filepath', 'mesh_animator')
     def __init__(self, image_filepath=None, mesh_animator=None, **kwargs):
