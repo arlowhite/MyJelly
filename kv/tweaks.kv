@@ -10,6 +10,8 @@
 
 <PartTweakScreen>:
     ScrollView:
+        id: scroll_view
+        do_scroll_x: False
         GridLayout:
         # GridLayout seems to be the only one that calculates the size of children
             id: tweaks_container
@@ -42,15 +44,23 @@
         FloatLayout:
             id: content_layout
 
+            canvas:
+                Color:
+                    rgb: 0.0, 0.0, 0.0
+                    a: root.obscure_color_alpha
+                Rectangle:
+                    pos: 0, 0
+                    # Looks weird to not go over slider too
+                    size: self.width, self.height
+
             ScreenManager:
                 id: tweaks_screen_manager
                 # default SlideTransition is the only one that doesn't obscure Jelly
                 size_hint: None, 1.0
                 width: content_layout.width - slider.width
 
-#                canvas:
-#                    Line:
-#                        rectangle: 0, 0, self.width, self.height
+
+
             StackLayout:
                 orientation: 'rl-bt'
                 size_hint: None, None

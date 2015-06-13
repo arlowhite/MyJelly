@@ -9,7 +9,7 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.utils import platform
 from kivy.logger import Logger, LOG_LEVELS
-from kivy.properties import StringProperty, ObjectProperty, BooleanProperty
+from kivy.properties import StringProperty, ObjectProperty, BooleanProperty, BoundedNumericProperty
 from kivy.animation import Animation
 from kivy.uix.actionbar import ActionButton
 from kivy.uix.settings import Settings
@@ -327,7 +327,7 @@ class PartTweakScreen(Screen):
     """Lists the Tweak selection for a part
     """
 
-    selected = ObjectProperty(None)
+    selected = ObjectProperty(None, allownone=True)
 
     @property
     def tweaks(self):
@@ -354,7 +354,71 @@ class PartTweakScreen(Screen):
         #     anim.start(child)
 
     def _child_on_release(self, setting_item):
-        self.selected = setting_item
+        if self.selected is None:
+            self.selected = setting_item
+        else:
+            # Clicking item again unsets selected
+            self.selected = None
+
+    def on_selected(self, o, selected):
+        """Move the selected item to the top of the screen and fade-out others
+        Moves the screen itself. Changing current screen will reset.
+        """
+        scroll_view = self.ids.scroll_view
+        tweaks_container = self.ids.tweaks_container  # GridLayout
+        # change scroll_y (0.0 - 1.0)
+        # or change content size
+
+        show_list = selected is None
+        Logger.debug('%s: on_selected %s  show_list=%s', self.__class__.__name__, selected, show_list)
+
+        # Disable user from scrolling
+        scroll_view.do_scroll_y = show_list
+
+        # Fade-out other tweaks
+        opacity = 1.0 if show_list else 0.0
+        anim = Animation(opacity=opacity, duration=0.4)
+        for child in tweaks_container.children:
+            if child is not selected:
+                child.disabled = not show_list
+                anim.start(child)
+
+        if selected:
+            target_y = self._calc_y_for_item_top()
+        else:
+            target_y = 0
+
+            # sine or quad
+        Animation(y=target_y, duration=0.4, t='in_out_quad').start(self)
+
+    def on_size(self, o, size):
+        if self.selected:
+            Animation.stop_all(self, 'y')
+            # Let layouts settle before doing this
+            # Binding tweaks_container size didn't work any better
+            Clock.schedule_once(self._update_item_top, 0)
+
+    def _update_item_top(self, dt):
+        """Update y value so that selected item is at top"""
+        self.y = self._calc_y_for_item_top()
+
+    def _calc_y_for_item_top(self):
+        """Calculate self.y value needed so that the selected item is at the top
+        returns 0 and logs warning if nothing selected
+        """
+        selected = self.selected
+        if selected is None:
+            Logger.warning("%s: _calc_y_for_item_top called despite no item selected", self.__class__.__name__)
+            return 0
+
+        item_top = selected.to_window(selected.x, selected.top)[1]
+        # screen_top = self.to_window(self.x, self.top)[1]
+        parent = self.parent
+        screen_top = parent.to_window(parent.x, parent.top)[1]
+        target_y = self.y + screen_top - item_top
+        return target_y
+
+
 
 class CreatureTweakScreen(AppScreen):
     """Shows creature moving behind screen with various tweaks to adjust the body parts
@@ -363,9 +427,10 @@ class CreatureTweakScreen(AppScreen):
     state_attributes = ('creature_id',)
 
     creature_id = StringProperty()
-    selected = ObjectProperty(None)
-    slider_grabbed = BooleanProperty(False)
+    selected = ObjectProperty(None, allownone=True)
+    slider_grabbed = BooleanProperty(False)  # not used presently, but may be useful
     debug_visuals = BooleanProperty(False)
+    obscure_color_alpha = BoundedNumericProperty(0.4, min=0.0, max=1.0)
 
     creature_turning = BooleanProperty(False)
 
@@ -444,6 +509,9 @@ class CreatureTweakScreen(AppScreen):
         self.ids.tweaks_part_selector.text = part_class.part_title
 
         sm = self.ids.tweaks_screen_manager
+        if sm.current_screen:
+            sm.current_screen.selected = None
+
         if sm.has_screen(part_name):
             sm.current = part_name
 
@@ -507,12 +575,16 @@ class CreatureTweakScreen(AppScreen):
         # Property ensures no duplicate calls for same menu item
         slider_opacity = 0.0 if setting_item is None else 1.0
         slider = self.ids.slider
+        slider.disabled = setting_item is None
         if slider_opacity != slider.opacity:
             Animation(opacity=slider_opacity).start(slider)
+
+        Animation(obscure_color_alpha=0.0 if setting_item else 0.4, duration=0.3, t='in_out_quad').start(self)
 
         if setting_item is None:
             return
 
+        # Set Slider value, min, max for not None setting_item
         opts = setting_item.tweak_options
         # FIXME Assuming Slider
         value = setting_item.value
@@ -571,18 +643,6 @@ class CreatureTweakScreen(AppScreen):
         if not self.__adjusting_slider:
             assert self.selected is not None
             self.selected.value = value
-
-    def on_slider_grabbed(self, _, grabbed):
-        if self.selected is None:
-            return
-
-        opacity = 0.0 if grabbed else 1.0
-
-        sm = self.ids.tweaks_screen_manager
-        selected = self.selected
-        not_selected = [x for x in sm.current_screen.tweaks if x is not selected]
-        for w in not_selected:
-            Animation(opacity=opacity, duration=0.2).start(w)
 
     def on_touch_down(self, touch):
         super(self.__class__, self).on_touch_down(touch)
