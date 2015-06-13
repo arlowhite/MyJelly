@@ -53,7 +53,8 @@ class GooeyBodyPart(EventDispatcher):
         'outer_spring_stiffness': 50,
         'outer_spring_damping': 15,
         'internal_spring_stiffness': 50,
-        'internal_spring_damping': 15
+        'internal_spring_damping': 15,
+        'drag_constant': 1e-6
     }
 
     # Used to generate gui
@@ -79,7 +80,10 @@ class GooeyBodyPart(EventDispatcher):
 
         ('internal_spring_damping', TweakMeta(_('Internal spring damping'),
                                           _('The damping amount for springs connecting the perimeter and interior.'),
-                                          float, 'Slider', 0.1, 100))
+                                          float, 'Slider', 0.1, 100)),
+
+        ('drag_constant', TweakMeta(_('Drag'), _('How much drag the tentacles experience.'),
+                                    float, 'Slider', 1e-7, 1e-5))
 
     ))
 
@@ -458,7 +462,8 @@ class GooeyBodyPart(EventDispatcher):
                 # drag force
                 # drag_force can be inf with high push power!? not sure why this happens
                 # TODO tweak
-                drag_force = body.velocity.rotated_degrees(180) * (body.velocity.get_length_sqrd() * 0.000001)
+                drag_force = body.velocity.rotated_degrees(180) \
+                             * (body.velocity.get_length_sqrd() * self.tweaks['drag_constant'])
 
                 force = drag_force.get_length_sqrd()
                 if force > 30.0:
@@ -606,7 +611,8 @@ class JellyBell(Creature):
         'backpush_fraction': 0.8,
         'rotation_offset_percent_radius': 0.3,
         # 'density': mass should be calculated from density and size
-        'density': 1e-5
+        'density': 1e-5,
+        'drag_constant': 1e-10
     }
 
     # Used to generate gui
@@ -620,7 +626,10 @@ class JellyBell(Creature):
         # mass is simpler for user to understand
         # mass units per cubic volume (world coordinate units)
         ('density', TweakMeta(_('Mass'), _('How heavy the Jelly is.'),
-                             float, 'Slider', 1e-6, 1e-4))
+                              float, 'Slider', 1e-6, 1e-4)),
+
+        ('drag_constant', TweakMeta(_('Drag'), _('How much drag the Jelly bell creates.'),
+                                    float, 'Slider', 1e-11, 1e-9))
     ))
 
     @not_none_keywords('image_filepath', 'mesh_animator')

@@ -312,7 +312,7 @@ class Creature(EventDispatcher):
         # 1. Apply forces to body
         # TODO drag, continuous force? how to update instead of adding new, just reset? look at arrows example
 
-        drag_const = 0.0000000001  # drag coeficcent * density of fluid
+        drag_const = self.tweaks['drag_constant']  # drag coeficcent * density of fluid
         # TODO cos/sine of angle?
         drag_force = body.velocity.rotated_degrees(180) * (body.velocity.get_length_sqrd() * self.cross_area * drag_const)
         # TODO limit force here as in Gooey drag?
