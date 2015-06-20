@@ -247,6 +247,14 @@ class PartTweakScreen(Screen):
         tweaks_container.add_widget(widget)
         widget.bind(on_release=self._child_on_release)
 
+    def select_tweak(self, tweak_name):
+        for child in self.ids.tweaks_container.children:
+            if child.key == tweak_name:
+                self.selected = child
+                return
+
+        raise ValueError("no tweak with name '%s'")
+
     def clear_tweaks(self, animate=True):
         tweaks_container = self.ids.tweaks_container
 
@@ -331,10 +339,12 @@ class CreatureTweakScreen(AppScreen):
     """Shows creature moving behind screen with various tweaks to adjust the body parts
     """
 
-    state_attributes = ('creature_id',)
+    state_attributes = ('creature_id', 'displayed_part_name', 'selected_tweak_name')
 
     creature_id = StringProperty()
     selected = ObjectProperty(None, allownone=True)
+    displayed_part_name = StringProperty(None)
+    selected_tweak_name = StringProperty(None, allownone=True)
     slider_grabbed = BooleanProperty(False)  # not used presently, but may be useful
     debug_visuals = BooleanProperty(False)
     obscure_color_alpha = BoundedNumericProperty(0.4, min=0.0, max=1.0)
@@ -393,8 +403,11 @@ class CreatureTweakScreen(AppScreen):
             button.bind(on_press=partial(self.display_part_tweaks, part_name))
             tweaks_selector.add_widget(button)
 
+        part_name = self.displayed_part_name
+        self.display_part_tweaks(part_name if part_name else constrs[0])
 
-        self.display_part_tweaks(constrs[0])
+        if self.selected_tweak_name:
+            self.ids.tweaks_screen_manager.current_screen.select_tweak(self.selected_tweak_name)
 
         Clock.schedule_once(self._create_creature_env, 0)
         self._initialized = True
@@ -426,6 +439,8 @@ class CreatureTweakScreen(AppScreen):
             screen = self._create_tweaks_screen(part_name)
             sm.add_widget(screen)
             sm.current = part_name
+
+        self.displayed_part_name = part_name
 
     def _create_tweaks_screen(self, part_name):
         Logger.debug('Generating tweaks screen for part %s', part_name)
@@ -489,6 +504,7 @@ class CreatureTweakScreen(AppScreen):
         Animation(obscure_color_alpha=0.0 if setting_item else 0.4, duration=0.3, t='in_out_quad').start(self)
 
         if setting_item is None:
+            self.selected_tweak_name = None
             return
 
         # Set Slider value, min, max for not None setting_item
@@ -509,6 +525,8 @@ class CreatureTweakScreen(AppScreen):
             slider.value = value
         finally:
             self.__adjusting_slider = False
+
+        self.selected_tweak_name = setting_item.key
 
     def get_value(self, part_name, tweak_name):
         """SettingItems call panel.get_value"""
