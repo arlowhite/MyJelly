@@ -227,7 +227,9 @@ class JellyAnimationConstructorScreen(AppScreen):
             self.ids.animate_toggle.state = kwargs['animate_toggle_state']
 
         except KeyError as e:
-            Logger.debug('%s: missing kwarg %s', self.__class__.__name__, e)
+            # This is expected when not restoring screen state
+            Logger.debug('%s: fresh screen (missing kwarg %s)',
+                         self.__class__.__name__, e)
 
         finally:
             anim_const.animate_changes = True
@@ -259,7 +261,27 @@ class JellyAnimationConstructorScreen(AppScreen):
         # (Indicating new part is avaliable for editing by user)
         assert part_name in creature_constructors
         constructor_class = constructor_class_for_part[part_name]
+
+        # The part in the store may have structure set by other components, such as tweaks
+        # So this code should merge some parts rather than overwrite
+        # But are there cases where structure should be overwritten? How to determine each?
+
+        # For example, will something modify MeshAnimator kwargs?
+        # Would be cleaner and safer to have this GUI set those.
+
+        # For now KIS and just pull out tweaks and insert it again.
+        tweaks = None
+        try:
+            tweaks = store[part_name][constructor_class.class_path]['tweaks']
+        except KeyError as e:
+            # It's an error if some other key is missing.
+            assert e.message == 'tweaks'
+
         store[part_name] = constructor_class.create_construction_structure(self)
+        if tweaks:
+            # Make sure this code didn't add tweaks, in which case merging is necessary
+            assert 'tweaks' not in store[part_name][constructor_class.class_path]
+            store[part_name][constructor_class.class_path]['tweaks'] = tweaks
 
         Logger.debug('{}: save_state() "{}" {}'
                      .format(self.__class__.__name__, part_name, store[part_name]))
