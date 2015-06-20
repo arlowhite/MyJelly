@@ -8,7 +8,8 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.utils import platform
 from kivy.logger import Logger, LOG_LEVELS
-from kivy.properties import StringProperty, ObjectProperty, BooleanProperty, BoundedNumericProperty
+from kivy.properties import StringProperty, ObjectProperty, BooleanProperty, BoundedNumericProperty, \
+    ListProperty
 from kivy.animation import Animation
 from kivy.uix.actionbar import ActionButton
 
@@ -16,6 +17,7 @@ from .main_screens import AppScreen
 from visuals.animations import setup_step
 from visuals.creatures.jelly import JellyBell, GooeyBodyPart
 from uix.environment import BasicEnvironment
+from uix.elements import LabeledSpinner
 from data.state_storage import load_jelly_storage, \
     construct_creature, constructable_members, new_jelly, lookup_constructable
 
@@ -24,12 +26,14 @@ constructor_class_for_part = {
     'tentacles': GooeyBodyPart
 }
 
-class JellyAnimationConstructorScreen(AppScreen):
+class AnimationConstructorScreen(AppScreen):
     """Screen that for editing the Control Points of a Mesh.
-    create a new screen instead of setting jelly_id or part_name for now"""
+    Provides UI to switch between animation_steps if set."""
     state_attributes = ('jelly_id', 'animation_step', 'part_name')
 
     animation_step = StringProperty(setup_step)
+    # Selectable Animation Steps [(value, label), ...]
+    animation_steps = ListProperty()
 
     def __init__(self, **kwargs):
         # if 'jelly_id' not in kwargs:
@@ -38,12 +42,13 @@ class JellyAnimationConstructorScreen(AppScreen):
         # The animation name to store the data under in the store, may be configured in future
         self.part_name = kwargs['part_name']
         assert self.part_name != 'bell_animation'  # FIXME remove old name check, 2nd below
-        self.animation_step = kwargs.get('animation_step', setup_step)
 
         store = load_jelly_storage(self.jelly_id)
         self.store = store
 
-        super(JellyAnimationConstructorScreen, self).__init__(**kwargs)
+        self.__animation_step_spinner = None
+
+        super(AnimationConstructorScreen, self).__init__(**kwargs)
 
         self.image_filepath = store['info']['image_filepath']  # TODO pass this into constructor?
 
@@ -81,16 +86,42 @@ class JellyAnimationConstructorScreen(AppScreen):
         finally:
             anim_const.animate_changes = True
 
-        self.ids.animation_step_spinner.text_value = self.animation_step
+        # Must bind manually because on_PROP is called before widget built
+        # (These properties need Build to finish first)
+        # This animates when not wanted...
+        with anim_const:
+            self.on_animation_step_change(self, self.animation_step)
 
+        self.bind(animation_step=self.on_animation_step_change)
 
-    def on_animation_step(self, widget, step):
+    def on_animation_step_change(self, widget, step):
         Logger.debug('%s: on_animation_step %s', self.__class__.__name__, step)
         if step == setup_step:
             # Untoggle Animate button
             self.ids.animate_toggle.state = 'normal'
 
-        self.ids.animation_constructor.animation_step = step
+        ac = self.ids.animation_constructor
+        ac.animation_step = step
+
+    def on_animation_steps(self, widget, steps):
+        spinner = self.__animation_step_spinner
+        if not spinner:
+            self.__animation_step_spinner = spinner = LabeledSpinner(
+                size_hint=(0.8, None), pos_hint={'center_x': 0.5}, height='40sp')
+
+            # spinner.bind(texture_size=spinner.setter('size'))
+            spinner.bind(text_value=self.setter('animation_step'))
+
+        spinner.values = [x[1] for x in steps]
+        spinner.text_values = [x[0] for x in steps]
+        layout = self.ids.main_layout
+        layout.add_widget(spinner, 2)
+
+        if self.animation_step in spinner.text_values:
+            spinner.text_value = self.animation_step
+        else:
+            Logger.warning('%s is not in text_values, defaulting', self.animation_step)
+            spinner.text_value = spinner.text_values[0]
 
     def save_state(self):
         # After screen leaving animation ended
@@ -120,9 +151,9 @@ class JellyAnimationConstructorScreen(AppScreen):
         tweaks = None
         try:
             tweaks = store[part_name][constructor_class.class_path]['tweaks']
-        except KeyError as e:
-            # It's an error if some other key is missing.
-            assert e.message == 'tweaks'
+        except KeyError:
+            # tweaks not set or class_path not set
+            pass
 
         store[part_name] = constructor_class.create_construction_structure(self)
         if tweaks:
@@ -135,15 +166,22 @@ class JellyAnimationConstructorScreen(AppScreen):
 
         store.store_sync()
 
-
     def get_state(self):
-        d = super(JellyAnimationConstructorScreen, self).get_state()
+        d = super(AnimationConstructorScreen, self).get_state()
 
         ac = self.ids.animation_constructor
         d.update(dict(scatter_pos=ac.pos, scatter_scale=ac.scale,
                       move_resize=ac.move_resize,
                       animate_toggle_state=self.ids.animate_toggle.state))
         return d
+
+class JellyBellConstructorScreen(AnimationConstructorScreen):
+
+    def __init__(self, **kwargs):
+        super(JellyBellConstructorScreen, self).__init__(**kwargs)
+        self.animation_steps = zip(('__setup__', 'open_bell', 'closed_bell'),
+                                   ('Setup', 'Open bell', 'Closed bell'))
+
 
 # Deprecated on Android
 class NewJellyScreen(AppScreen):

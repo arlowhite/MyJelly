@@ -140,37 +140,6 @@ class MyJellyApp(App):
         # TODO left/right decision, sort screens?
         self.screen_manager.switch_to(s)
 
-    # def open_animation_constructor(self, jelly=None):
-    #     sm = self.screen_manager
-    #     # if not sm.has_screen('JellyAnimationConstructor'):
-    #     # s = JellyAnimationConstructorScreen(name='JellyAnimationConstructor')
-    #         # sm.add_widget(s)
-    #
-    #     # sm.current = 'JellyAnimationConstructor'
-    #     # switch_to destroys old screen
-    #     s = JellyAnimationConstructorScreen(name='JellyAnimationConstructor')
-    #     s.set_animation_data(jelly)
-    #     sm.switch_to(s, direction='left')
-    #     #ac = sm.current_screen
-    #
-    #
-    # def open_jelly_selection(self):
-    #     selection = JellySelectionScreen(name="JellySelection")
-    #     # # FIXME Hardcoded, load from local storage
-    #     holland = JellyData()
-    #     holland.bell_image_filename = 'media/images/holland_jelly.png'
-    #     data = [JellyData(), holland, JellyData()]
-    #     selection.display_jellies(data)
-    #
-    #     self.screen_manager.switch_to(selection, direction='right')
-    #     #self.screen_manager.add_widget(selection)
-    #
-    # def open_jelly_environment(self):
-    #     # Hackish, check if AnimationConstructor screen, grab Jelly Data?
-    #
-    #     pass
-
-
 if __name__ == '__main__':
     MyJellyApp().run()
 

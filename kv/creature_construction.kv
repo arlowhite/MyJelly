@@ -1,4 +1,5 @@
 #:kivy 1.9.0
+#:import AnimationConstructor uix.animation_constructors
 
 <JellyDesignScreen>:
     BoxLayout:
@@ -25,18 +26,22 @@
 # TODO generate Buttons based on creature_constructors rather than hardcoding here
             Button:
                 text: 'Animate Bell'
-                on_press: app.open_screen('JellyAnimationConstructorScreen', {'jelly_id': root.jelly_id, 'part_name':'jelly_bell'})
+                on_press:
+                    app.open_screen('JellyBellConstructorScreen',
+                    {'jelly_id': root.jelly_id,'part_name':'jelly_bell'})
 
             Button:
                 text: 'Outline Tentacles'
-                on_press: app.open_screen('JellyAnimationConstructorScreen', {'jelly_id': root.jelly_id, 'part_name':'tentacles'})
+                on_press:
+                    app.open_screen('AnimationConstructorScreen',
+                    {'jelly_id': root.jelly_id,'part_name':'tentacles'})
 
             Button:
                 text: 'Tweaks'
                 on_press: app.open_screen('CreatureTweakScreen', {'creature_id': root.jelly_id})
 
 
-<JellyAnimationConstructorScreen>:
+<AnimationConstructorScreen>:
     id: screen
 
     BoxLayout:
@@ -71,24 +76,10 @@
 
 
         BoxLayout:
+            id: main_layout
             orientation: 'vertical'
 
-            LabeledSpinner:
-                id: animation_step_spinner
-                # Darkens instruction text
-                #disabled: len(animation_constructor.ctrl_points) < 3
-                #loop: True
-                size_hint_y: None
-                size_hint_x: 0.8
-                pos_hint: {'center_x': 0.5}
-                #height: cm(1.0)
-                # TODO labels vs values? internationalization?
-                #text: 'Setup'
-                values: ('Setup', 'Open bell', 'Closed bell')
-                text_values: ('__setup__', 'open_bell', 'closed_bell')
-                text_value: '__setup__'
-                on_text_value: screen.animation_step = args[1]
-
+            # LabeledSpinner will be inserted here if animation_steps
 
             FloatLayoutStencilView:
 
@@ -128,6 +119,7 @@
                     id: animate_toggle
                     text: "Animate"
                     on_state: animation_constructor.preview_animation(self.state=='down')
+                    # FIXME does this work, import setup_step?
                     disabled: animation_constructor.animation_step == 0
 
 

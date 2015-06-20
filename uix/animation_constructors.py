@@ -43,16 +43,14 @@ class AnimationConstructor(Scatter):
         self.mesh_attached = False
         self._image_size_set = False
         self.mesh = None
-        # FIXME test state restore from different animation_step, trigger on_animation, check mesh_attched on CPs
-        self.animation_step = setup_step
         self.animation_steps_order = []
 
-        self._previous_step = self.animation_step
         self.faded_image_opacity = 0.5
         self._moved_control_point_trigger = Clock.create_trigger(self.on_control_point_moved)
         self._control_point_opacity_trigger = Clock.create_trigger(self._animate_control_point_opacity)
 
         super(AnimationConstructor, self).__init__(**kwargs)
+        self._previous_step = self.animation_step
 
         self.bind(move_resize=self.decide_disable_control_points, animating=self.decide_disable_control_points)
 
@@ -267,7 +265,7 @@ class AnimationConstructor(Scatter):
         move control points to step with animation
         Set mesh_attached=False if on setup_step
         """
-        Logger.debug('on_animation_step %s', step)
+        Logger.debug('%s: on_animation_step %s', self.__class__.__name__, step)
         if not isinstance(step, basestring):
             raise ValueError('animation_step must be a string, given %s'%step, type(step))
 
