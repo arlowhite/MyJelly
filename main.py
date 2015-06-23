@@ -4,6 +4,7 @@ __author__ = 'awhite'
 __version__ = '0.1'
 
 import gettext
+import inspect
 
 # Localization setup
 gettext.bindtextdomain('messages', 'locale')
@@ -23,6 +24,7 @@ from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.metrics import Metrics
 
 #from behaviors.basic import FollowPath
+from data import state_storage, constructable
 from data.state_storage import load_app_storage, new_jelly
 from uix import screens
 from uix.elements import *
@@ -141,5 +143,19 @@ class MyJellyApp(App):
         self.screen_manager.switch_to(s)
 
 if __name__ == '__main__':
-    MyJellyApp().run()
+    app = MyJellyApp()
 
+    # Specify data storage directory
+    # TODO better directory for android?
+    state_storage.user_data_dir = app.user_data_dir
+
+    # Specify legal constructor classes
+    for member in inspect.getmembers(constructable):
+        if member[0].startswith('_'):
+            continue
+
+        clazz = member[1]
+        path = '{}.{}'.format(clazz.__module__, clazz.__name__)
+        state_storage.constructable_members[path] = clazz
+
+    app.run()
