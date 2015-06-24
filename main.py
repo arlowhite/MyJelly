@@ -98,7 +98,7 @@ class MyJellyApp(App):
         name = screen['class_name']
         state = screen['state']
         Logger.info('main: restore_state, open_screen(%s, %s)'%(name, state))
-        self.open_screen(name, state)
+        self.open_screen(name, **state)
 
 
     # def on_start(self):
@@ -124,10 +124,12 @@ class MyJellyApp(App):
     #     game.add_widget(ac)
     #     game.start()
 
-    def open_screen(self, screen, screen_args = None):
+    def open_screen(self, screen, **screen_args):
+        # FIXME **kwargs make sure works in KV; then refactor
         "screen: instance or string, screen_state: dictionary"
         Logger.debug('Opening screen: %s {%s}', screen, screen_args)
-        screen_class = screens.__dict__[screen]
+        screen_class = screens.load(screen)
+
         if not issubclass(screen_class, Screen):
             raise ValueError('%s is not a Screen!'%screen)
 
@@ -145,10 +147,6 @@ class MyJellyApp(App):
 if __name__ == '__main__':
     app = MyJellyApp()
 
-    # Specify data storage directory
-    # TODO better directory for android?
-    state_storage.user_data_dir = app.user_data_dir
-
     # Specify legal constructor classes
     for member in inspect.getmembers(constructable):
         if member[0].startswith('_'):
@@ -157,5 +155,9 @@ if __name__ == '__main__':
         clazz = member[1]
         path = '{}.{}'.format(clazz.__module__, clazz.__name__)
         state_storage.constructable_members[path] = clazz
+
+    # Specify data storage directory
+    # TODO better directory for android?
+    state_storage.user_data_dir = app.user_data_dir
 
     app.run()

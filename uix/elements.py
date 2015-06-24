@@ -72,10 +72,8 @@ class JellySelectButton(Button):
     # Note: Button binding done in KV
 
     def __init__(self, jelly_store, **kwargs):
-        # TODO move to CreatureWidget?
         self.store = jelly_store
-        info = jelly_store['info']
-        self.jelly_id = info['id']
+        self.jelly_id = jelly_store.creature_id
         # Maybe no overall image, maybe image selection happens at parts?
         # self.image_filename = info['image_filepath']
 
@@ -99,7 +97,8 @@ class JellySelectButton(Button):
 
     def on_release(self):
         # TODO long press to edit? Other options, delete, etc. Action Menu of JellyEditor?
-        print(self.last_touch)
+        #print(self.last_touch)
+        pass
 
 class FloatLayoutStencilView(FloatLayout, StencilView):
     pass

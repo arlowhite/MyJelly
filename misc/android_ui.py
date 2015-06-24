@@ -55,18 +55,18 @@ def user_select_image(callback):
                 # This may just go into the void...
                 raise NotImplementedError('Unknown result_code "{}"'.format(result_code))
 
-            selectedImage = intent.getData();  # Uri
-            filePathColumn = [MediaStore_Images_Media_DATA]; # String[]
+            selectedImage = intent.getData()  # Uri
+            filePathColumn = [MediaStore_Images_Media_DATA] # String[]
             # Cursor
             cursor = currentActivity.getContentResolver().query(selectedImage,
-                    filePathColumn, None, None, None);
-            cursor.moveToFirst();
+                    filePathColumn, None, None, None)
+            cursor.moveToFirst()
 
             # int
-            columnIndex = cursor.getColumnIndex(filePathColumn[0]);
+            columnIndex = cursor.getColumnIndex(filePathColumn[0])
             # String
-            picturePath = cursor.getString(columnIndex);
-            cursor.close();
+            picturePath = cursor.getString(columnIndex)
+            cursor.close()
             Logger.info('android_ui: user_select_image() selected %s', picturePath)
 
             # This is possibly in a different thread?

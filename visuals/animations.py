@@ -1,15 +1,17 @@
 __author__ = 'awhite'
 
 from collections import namedtuple
+from array import array
 
 from kivy.clock import Clock
 from kivy.animation import Animation
 from kivy.event import EventDispatcher
 from kivy.properties import NumericProperty, ObjectProperty
 from kivy.graphics import Mesh
+from kivy.utils import deprecated
 
-from misc.util import evaluate_thing, not_none_keywords, deprecated
-
+from misc.util import evaluate_thing, not_none_keywords
+from misc.exceptions import InsufficientData
 
 # RelativeLayout or Scatter seems overcomplicated and causes issues
 # just do it myself, don't really need to add_widget()
@@ -196,9 +198,22 @@ class MeshAnimator(EventDispatcher):
         mesh.vertices = verts
 
     def on_mesh(self, _, mesh):
+        # TODO float or double array?
+        # FIXME array doesn't seem to make a difference, posted about it
+        #mesh.vertices = array('f', self.initial_vertices)
         mesh.vertices = self.initial_vertices
         mesh.indices = self.initial_indices
         mesh.mode = self.mesh_mode
+
+    def check_sufficient_data(self):
+        """Check if there is sufficient data to render the Mesh"""
+        if len(self.initial_vertices) == 0:
+            raise InsufficientData('{}: No initial_vertices'.format(self.__class__.__name__))
+
+        if len(self.initial_indices) == 0:
+            raise InsufficientData('{}: No initial_indices'.format(self.__class__.__name__))
+
+        # Whether steps are needed is arguable...
 
     @staticmethod
     @deprecated

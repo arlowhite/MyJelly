@@ -109,5 +109,7 @@ class BasicEnvironment(RelativeLayout):
         # TODO refactor behavior code
         for c in self.creatures:
             angle = c.angle + random.randint(-180, 180)
-            print('change_behavior: current angle=%f  orienting %f deg' % (c.angle, angle))
+            Logger.info('{}: change_behavior() current angle={}  orienting {} deg'.format(
+                self.__class__.__name__, c.angle, angle))
+
             c.orient(angle)

@@ -8,7 +8,8 @@ _ = gettext.lgettext
 
 import random
 from math import cos, sin, radians, degrees, pi
-from collections import namedtuple, OrderedDict
+from collections import namedtuple, OrderedDict, Iterable
+from enum import Enum
 
 from kivy.logger import Logger
 from kivy.graphics import Color, Translate, PushMatrix, PopMatrix, \
@@ -25,7 +26,7 @@ from visuals.animations import MeshAnimator, setup_step
 from misc.exceptions import InsufficientData
 from misc.util import not_none_keywords
 from misc.physics_util import world_pos_of_offset, offset_to_pos
-from .creature import Creature
+from .creature import Creature, CreatureBodyPart
 
 ChainNode = namedtuple('ChainNode', ['shape', 'body', 'ellipse', 'perimeter_spring', 'internal_springs'])
 # Fields that may be None and are physics objects
@@ -38,8 +39,14 @@ TweakMeta = namedtuple('TweakInfo', 'title desc type ui min max')
 SPRING_MAX_FORCE = 1e6
 # TODO max_bias?
 
+class Parts(object):
+    """List of typical part names to avoid typos in code"""
+    jelly_bell = 'jelly_bell'
+    gooey_body = 'gooey_body'
+    tentacles_group = 'tentacles/'
+
 # TODO PhysicsVisual baseclass?
-class GooeyBodyPart(EventDispatcher):
+class GooeyBodyPart(CreatureBodyPart):
     """Creates a Mesh that behaves as gooey mass by creating physical springs between all vertices
     and stiffer center skeleton"""
 
@@ -117,9 +124,9 @@ class GooeyBodyPart(EventDispatcher):
             anim_constr.mesh_mode = data['mesh_mode']
             anim_constr.setup_control_points(data['vertices'])
 
-    @not_none_keywords('creature', 'image_filepath', 'vertices', 'indices', 'part_name')
-    def __init__(self, creature=None, part_name=None, image_filepath=None, mesh_mode='triangle_fan',
-                 vertices=None, indices=None, tweaks=None):
+    @not_none_keywords('image_filepath', 'vertices', 'indices')
+    def __init__(self, image_filepath=None, mesh_mode='triangle_fan',
+                 vertices=None, indices=None, **kwargs):
 
         num_vertices = len(vertices)
 
@@ -128,19 +135,8 @@ class GooeyBodyPart(EventDispatcher):
         if len(indices) < 3:
             raise InsufficientData('Less than 3 indices')
 
-        # FIXME BodyPart base class, Creature extends BodyPart
-        if tweaks is None:
-            tweaks = {}
-
-        self.tweaks = tweaks
-        # TODO common tweaks code
-        for tweak_name, value in self.tweaks_defaults.viewitems():
-            if tweak_name not in tweaks:
-                Logger.debug('%s missing tweak "%s" setting default value %s', self.__class__.__name__,
-                             tweak_name, value)
-                tweaks[tweak_name] = value
-
-        self.part_name = part_name
+        super(GooeyBodyPart, self).__init__(**kwargs)
+        tweaks = self.tweaks
 
         # Mapping of ChainNode bodies to their natural distance from creature.pos
         self.__body_distance = {}
@@ -151,7 +147,7 @@ class GooeyBodyPart(EventDispatcher):
 
         # FIXME minimize assupmtions about what binding to
         # In future don't be so jelly name specific
-        self.jelly = self.creature = creature
+        self.jelly = creature = self.creature
 
         creature_phy_body = creature.phy_body
         debug_visuals = creature.debug_visuals
@@ -396,6 +392,9 @@ class GooeyBodyPart(EventDispatcher):
         :returns list of ChainNode"""
 
         assert len(positions) > 0
+        if not positions:
+            raise ValueError()
+
         prev = None
 
         debug_visuals = self.creature.debug_visuals
@@ -512,46 +511,23 @@ class GooeyBodyPart(EventDispatcher):
         # force = vec_to_jelly.perpendicular_normal() * (angle_diff * 20)
         # first_body.apply_impulse(force)
 
-    def bind_physics_space(self, space):
-        """Add all physics objects this body part created to the physics space
+    def phy_objects(self, body_only=False):
+        """generator of all physics objects in this body part
+        Order: Body > Shape > Constraint
         """
-
-        # space.add(self.phy_body, self.phy_shape)
-        # space.add(self.spring1)
-        # space.add(self.spring2)
-        # space.add(self.rot_spring)
-
-        # Don't bother save space, can just get physics space from creature.environment_wref
-
         for chain in self.chains:
             for node in chain:
-                space.add(node.body)
-                for field in optional_chain_node_physics_fields:
-                    obj = getattr(node, field)
-                    if obj:
-                        # add/remove can handle lists i think
-                        space.add(obj)
+                yield node.body
 
-    def unbind_physics_space(self, space):
-        """Remove all physics objects that were added in bind_physics_space
-        from the provided space.
-        """
-
-        for chain in self.chains:
-            for node in chain:
-                space.remove(node.body)
-                for field in optional_chain_node_physics_fields:
-                    obj = getattr(node, field)
-                    if obj:
-                        space.remove(obj)
-
-    def translate(self, translation_vector):
-        for chain in self.chains:
-            for node in chain:
-                node.body.position += translation_vector
-
-        # Force visual update
-        self.update()
+                if not body_only:
+                    for field in optional_chain_node_physics_fields:
+                        obj = getattr(node, field)
+                        if obj:
+                            if isinstance(obj, Iterable):
+                                for o in obj:
+                                    yield o
+                            else:
+                                yield obj
 
     def on_creature_mass(self, o, mass):
         "Update all bodies mass"
@@ -589,7 +565,6 @@ class GooeyBodyPart(EventDispatcher):
                         spring.damping = value
                     except AttributeError:
                         pass
-
 
 
 class JellyBell(Creature):
@@ -639,6 +614,8 @@ class JellyBell(Creature):
         image_filepath"""
 
         self.image_filepath = image_filepath
+
+        mesh_animator.check_sufficient_data()
         self.mesh_animator = mesh_animator
 
         self._prev_bell_vertical_fraction = 0.0
@@ -897,3 +874,125 @@ class JellyBell(Creature):
     #
     # def on_scale(self, widget, new_scale):
     #     self.size = (self.texture_img.width * self.scale, self.texture_img.height * self.scale)
+
+class Tentacle(object):
+    # TODO Tentacle features
+    # copy mechanism
+    #  - Is there really anything to share besides the image?
+    #  - Could just cache calculations on image...
+    # scaling
+    # I think it's cleanest for scaling to be done by just moving the bodies closer together
+    # (Adjusting constraint) and radius as well as vertex distances
+
+    @staticmethod
+    def create_construction_structure(anim_constr_screen):
+        raise NotImplementedError()
+        # anim_constr = anim_constr_screen.ids.animation_constructor
+        # vertices, indices = anim_constr.calc_mesh_vertices(update_mesh=False)
+        #
+        # return {GooeyBodyPart.class_path:
+        #         {
+        #             'image_filepath': anim_constr.image_filepath,
+        #             'mesh_mode': anim_constr.mesh_mode,
+        #             'vertices': vertices, 'indices': indices
+        #         }
+        #     }
+
+    @not_none_keywords('circles', 'image_filepath')
+    def __init__(self, circles=None, image_filepath=None, **kwargs):
+        super(Tentacle, self).__init__(**kwargs)
+
+        creature = self.creature
+        tweaks = self.tweaks
+
+        # Some kind at Attachment parameter?
+        attachment = NotImplemented
+
+        with creature.canvas.before:
+            self.color = Color(rgba=(1.0, 1.0, 1.0, 1.0))
+            img = CoreImage(image_filepath)
+            self.mesh = mesh = Mesh(mode='triangle_strip', texture=img.texture)
+
+        texture_width = img.texture.width
+        texture_height = img.texture.height
+
+        # What if when scaling smaller, circles crash into each other?
+        # Maybe TentacleInstance is what takes circles?
+        # So this should be in charge of calculating circles?
+        # Dynamic scaling is going to be difficult...
+        # Actually may be easier to change body size and vertices calculation to scale
+        # Maybe it's fine if shape groups makes them not collide
+
+        self.phy_circles = circles = []
+        # TODO think about density vs radius or vs total tentacle
+        # One issue is if radius spacing is updated, mass will change
+        # So should be total mass
+        # Gooey also has issues with total_mass, need to think about mass distribution schemes
+        # density = tweaks['density']
+        vertices = []
+        # Is anything wrong with making the padding much larger? (as long as not out of texture bounds)
+        vertex_padding = 2
+        for x, y, radius in circles:
+            rad_plus_pad = radius + vertex_padding
+            # mass = density * (4/3.0) * pi * radius ^ 3
+            mass = 100
+            b = Body(mass, moment_for_circle(mass, radius))
+
+            circle = Circle(b, radius, (0, 0))
+            # self.phy_shape.friction = 0.4
+            circle.elasticity = 0.3
+            # self.phy_shape.group = self.phy_group_num
+            circles.append((b, circle))
+
+            # x, y, coordinates don't matter, but just use current anyway
+            tx = x - rad_plus_pad
+            vertices.extend((tx, y, tx / texture_width, y / texture_height))
+            tx = x + rad_plus_pad
+            vertices.extend((tx, y, tx / texture_width, y / texture_height))
+
+        mesh.vertices = vertices
+        mesh.indices = range(len(vertices) / 4)
+
+        self.update()
+
+    def update(self):
+        debug_visuals = self.creature.debug_visuals
+
+        verts = self.mesh.vertices
+        # Future: Could maybe do intermediate vertex with bezier curve?
+
+        vertex_padding = 2
+        # At this point, u, v is set (as usual) and just x, y are to be updated
+        for i, (body, shape) in enumerate(self.phy_circles):
+            i *= 2
+
+            radius = shape.radius
+            rad_plus_pad = radius + vertex_padding
+
+            x = body.x
+            y = body.y
+
+            # 2 vertices for each circle
+            vertex = i * 4
+            verts[vertex] = x - rad_plus_pad
+            verts[vertex + 1] = y
+
+            vertex += 4
+            verts[vertex] = x + rad_plus_pad
+            verts[vertex + 1] = y
+
+        self.mesh.vertices = verts
+
+
+    def phy_objects(self, body_only=False):
+        for circle in self.phy_circles:
+            yield circle[0]
+
+        if body_only:
+            return
+
+        for circle in self.phy_circles:
+            yield circle[1]
+
+        # TODO constraints
+

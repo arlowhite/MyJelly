@@ -20,6 +20,7 @@ from uix.environment import BasicEnvironment
 from uix.elements import LabeledSpinner
 from data.state_storage import load_jelly_storage, \
     construct_creature, constructable_members, new_jelly, lookup_constructable
+from misc.util import not_none_keywords
 
 constructor_class_for_part = {
     'jelly_bell': JellyBell,
@@ -35,7 +36,8 @@ class AnimationConstructorScreen(AppScreen):
     # Selectable Animation Steps [(value, label), ...]
     animation_steps = ListProperty()
 
-    def __init__(self, **kwargs):
+    @not_none_keywords('image_filepath')
+    def __init__(self, image_filepath=None, **kwargs):
         # if 'jelly_id' not in kwargs:
             # raise ValueError('Must specify jelly_id')
         self.jelly_id = kwargs['jelly_id']
@@ -50,7 +52,7 @@ class AnimationConstructorScreen(AppScreen):
 
         super(AnimationConstructorScreen, self).__init__(**kwargs)
 
-        self.image_filepath = store['info']['image_filepath']  # TODO pass this into constructor?
+        self.image_filepath = image_filepath
 
         anim_const = self.ids.animation_constructor
 
@@ -132,7 +134,7 @@ class AnimationConstructorScreen(AppScreen):
 
         # TODO Is this the appropriate place to hard-code this?
         # Probably refactor body part constructor GUI in reef game
-        creature_constructors = store['info']['creature_constructors']
+        creature_constructors = store.creature_constructors
 
         assert part_name != 'bell_animation'  # FIXME remove this old name check
         # Current design expects part name to be added to creature_constructors first
@@ -182,6 +184,49 @@ class JellyBellConstructorScreen(AnimationConstructorScreen):
         self.animation_steps = zip(('__setup__', 'open_bell', 'closed_bell'),
                                    ('Setup', 'Open bell', 'Closed bell'))
 
+class ImportImageScreen(AppScreen):
+    "Provides choice o"
+
+    @not_none_keywords('title')
+    def __init__(self, title=None, creature_id=None):
+        """
+        :param title Text to display to user that provides context
+        """
+
+
+
+class TentaclesConstructorScreen(AppScreen):
+    """UI for defining a Tentacle and its instances.
+
+    Drag out more tentacle copies, stretch
+    Trash drag button
+    """
+    # FIXME
+    pass
+
+# FIXME save?
+
+
+def import_photo_then(title, obj, **kwargs):
+    """Show Import photo UI, then if photo is selected.
+    :param obj Class or function
+    function will be called with image_filepath argument. A Class will be given image_filepath kwarg.
+    :param kwargs keyword arguments for the Class
+    """
+    assert callable(obj)
+
+    if type(obj) is type:
+        # Class of some kind, create a function that constructs it with kwargs
+        def func(image_filepath):
+            obj(image_filepath=image_filepath, **kwargs)
+
+        obj = func
+
+    # Could do Popup, but just stick with the Screen scheme for now
+    # TODO select from previous creature images
+    # TODO select from images used in any creature
+    screen = ImportImageScreen(title=title, then=obj)
+    App.get_running_app()
 
 # Deprecated on Android
 class NewJellyScreen(AppScreen):
@@ -222,7 +267,7 @@ class NewJellyScreen(AppScreen):
         filepath = files[0]
         jelly_id = new_jelly(filepath)
 
-        App.get_running_app().open_screen('JellyDesignScreen', dict(jelly_id=jelly_id))
+        App.get_running_app().open_screen('JellyDesignScreen', jelly_id=jelly_id)
 
 from kivy.uix.settings import SettingItem
 
@@ -377,7 +422,7 @@ class CreatureTweakScreen(AppScreen):
     def initialize(self):
         creature_id = self.creature_id
         self.creature_store = store = load_jelly_storage(creature_id)
-        constrs = store['info']['creature_constructors']
+        constrs = store.creature_constructors
 
         _store_tweaks = self._store_tweaks
 
@@ -600,6 +645,7 @@ class CreatureTweakScreen(AppScreen):
 
     def on_creature_turning(self, _, turning):
         creature = self.creature
+        # FIXME follow-up on turning code
         print(turning)
         if turning:
             Clock.schedule_interval(self._creature_orient_update, 1/20.0)

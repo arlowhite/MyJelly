@@ -16,6 +16,17 @@
                     # FIXME Manage previous button
                     on_press: app.open_screen('JellySelectionScreen')
 
+                ActionGroup:
+                    text: '+Add'
+
+                    ActionButton:
+                        text: 'Add Tentacle'
+                        on_press: root.add_tentacles()
+
+                    ActionButton:
+                        text: 'Add Gooey'
+
+
                 ActionButton:
                     text: 'Delete'  # TODO Confirmation
                     on_press: root.delete_jelly()
@@ -28,17 +39,23 @@
                 text: 'Animate Bell'
                 on_press:
                     app.open_screen('JellyBellConstructorScreen',
-                    {'jelly_id': root.jelly_id,'part_name':'jelly_bell'})
+                    jelly_id=root.jelly_id, part_name='jelly_bell')
 
             Button:
                 text: 'Outline Tentacles'
                 on_press:
                     app.open_screen('AnimationConstructorScreen',
-                    {'jelly_id': root.jelly_id,'part_name':'tentacles'})
+                    jelly_id=root.jelly_id, part_name='tentacles')
+
+            Button:
+                text: 'Tentacle Test'
+                on_press:
+                    app.open_screen('Test',
+                    jelly_id=root.jelly_id, part_name='tentacle_test')
 
             Button:
                 text: 'Tweaks'
-                on_press: app.open_screen('CreatureTweakScreen', {'creature_id': root.jelly_id})
+                on_press: app.open_screen('CreatureTweakScreen', creature_id=root.jelly_id)
 
 
 <AnimationConstructorScreen>:
@@ -57,7 +74,7 @@
                 ActionPrevious:
                     title: 'Jelly Animator'
                     # FIXME Manage previous button
-                    on_press: app.open_screen('JellyDesignScreen', {'jelly_id': root.jelly_id})
+                    on_press: app.open_screen('JellyDesignScreen', jelly_id=root.jelly_id)
 
                 ActionButton:
                     icon: 'atlas://data/images/defaulttheme/previous_normal'

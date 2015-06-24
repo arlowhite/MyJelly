@@ -382,3 +382,44 @@ class Creature(EventDispatcher):
         self.current_behavior = b
         # TODO think about this API
         b.attach(self)
+
+
+class CreatureBodyPart(EventDispatcher):
+
+    def __init__(self, creature=None, part_name=None, tweaks=None, **kwargs):
+        super(CreatureBodyPart, self).__init__(**kwargs)
+
+        if tweaks is None:
+            tweaks = {}
+
+        self.tweaks = tweaks
+
+        # Set missing tweaks to default
+        for tweak_name, value in self.tweaks_defaults.viewitems():
+            if tweak_name not in tweaks:
+                Logger.debug('%s missing tweak "%s" setting default value %s', self.__class__.__name__,
+                             tweak_name, value)
+                tweaks[tweak_name] = value
+
+        self.creature = creature
+        self.part_name = part_name
+
+    def bind_physics_space(self, space):
+        """Add all physics objects this body part created to the physics space
+        """
+        for o in self.phy_objects():
+            space.add(o)
+
+    def unbind_physics_space(self, space):
+        for o in reversed(self.phy_objects()):
+            space.remove(o)
+
+    def translate(self, translation_vector):
+        for body in self.phy_objects(body_only=True):
+            body.position += translation_vector
+
+        # Force visual update
+        self.update()
+
+    def adjust_tweak(self, name, value):
+        self.tweaks[name] = value

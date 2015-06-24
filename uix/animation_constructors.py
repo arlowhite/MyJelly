@@ -7,10 +7,11 @@ from kivy.graphics.vertex_instructions import Rectangle, Mesh
 from kivy.properties import ListProperty, BoundedNumericProperty, BooleanProperty, StringProperty
 from kivy.uix.scatter import Scatter
 from kivy.vector import Vector
+from kivy.utils import deprecated
+
 from visuals.animations import MeshAnimator, setup_step
 from visuals.drawn_visual import ControlPoint
 
-from misc.util import deprecated
 from data.state_storage import construct_value
 
 __author__ = 'awhite'

@@ -42,6 +42,20 @@ class LazyJsonStore(JsonStore):
         self._is_changed = True
         return True
 
+    def merge(self, *keypath, **kwargs):
+        """Merge given kwargs into the dictionary at the given path.
+        :param keypath equivalent to store['key1']['key2']
+        :raises KeyError if invalid keypath
+        """
+        d = self._data
+        for key in keypath:
+            d = d[key]
+
+        if not isinstance(d, dict):
+            raise AssertionError('Object at keypath {} is {} not dict'.format(keypath, type(d)))
+
+        d.update(kwargs)
+
     # Override so new dict object isn't created
     def __setitem__(self, key, values):
         # Not sure why this enforcement exists, but keeping it for now
@@ -81,7 +95,7 @@ class CreatureStore(LazyJsonStore):
     def __init__(self, filename, creature_id=None, **kwargs):
         super(CreatureStore, self).__init__(filename, **kwargs)
 
-        if '__info' not in self:
+        if '_info' not in self:
             self._initialize_new(creature_id)
 
         # Convenience properties
@@ -107,7 +121,7 @@ class CreatureStore(LazyJsonStore):
         # Go through all part instance names in the store
         for name in self:
             if name[0] == '_':
-                # metadata such as __info
+                # metadata such as _info
                 continue
 
             num_slashes = name.count('/')
@@ -153,14 +167,14 @@ class CreatureStore(LazyJsonStore):
 
     @property
     def info(self):
-        return self['__info']
+        return self['_info']
 
     def _initialize_new(self, creature_id):
         "called when info not already in store"
         if creature_id is None or len(creature_id) == 0:
             raise ValueError('creature_id must be provided when creating a new store')
 
-        self['__info'] = {'created_datetime': datetime.utcnow().isoformat(),
+        self['_info'] = {'created_datetime': datetime.utcnow().isoformat(),
                           'id': creature_id, 'creature_constructors': []}
 
     def store_delete(self, deleted_key):
@@ -363,18 +377,18 @@ def __jelly_json_path(jelly_id):
 # This should probably be somewhere else (maybe jelly.py?),
 # but this is as good a spot as any for now.
 def new_jelly(image_filepath):
-    "Creates a new jelly store and id and returns the id"
+    """Creates a new jelly store and id and returns the id"""
 
     # TODO If image used before, ask if want to open that Jelly
     # TODO Copy image file for safe keeping?
     # TODO check if image file
     jelly_id = uuid4().hex
     jelly = load_jelly_storage(jelly_id, new=True)
-    jelly.put('info', image_filepath=image_filepath)
+    jelly.merge('_info', image_filepath=image_filepath)
 
     # TODO This defines the parts available in the menu
     # In the future user might change this list through the GUI to define optional parts
-    jelly['info']['creature_constructors'].extend(('jelly_bell', 'tentacles'))
+    jelly.creature_constructors.extend(('jelly_bell', 'tentacles'))
 
     jelly.store_sync()  # As soon as image is saved, save jelly state
     return jelly_id
@@ -513,8 +527,8 @@ def construct_value(store_node, **merge_kwargs):
 
 def construct_creature(store, **merge_kwargs):
     """Construct """
-    constructor_names = store['info']['creature_constructors']
-    creature_id = store['info']['id']
+    constructor_names = store.creature_constructors
+    creature_id = store.creature_id
 
     if not constructor_names:
         raise InsufficientData('creature_constructors empty')
@@ -524,6 +538,11 @@ def construct_creature(store, **merge_kwargs):
     creature_part_name = constructor_names[0]
     merge_kwargs.update({'creature_id': creature_id, 'part_name': creature_part_name})
     creature = construct_value(store[creature_part_name], **merge_kwargs)
+
+    # Maybe different parts can ellect to be the main Creature part?
+    # For example, gooey without bell?
+    # But that logic needs to be somewhere, so no?
+    # CiliatedCreature would just make anything move for example
 
     creature_parts = store.keys()
     for name in constructor_names[1:]:

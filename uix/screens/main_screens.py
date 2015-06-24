@@ -9,8 +9,9 @@ from kivy.logger import Logger
 
 from uix.elements import JellySelectButton
 from uix.environment import BasicEnvironment
-from data.state_storage import load_all_jellies, delete_jelly, \
+from data.state_storage import load_all_jellies, load_jelly_storage, delete_jelly, \
     construct_creature, new_jelly
+from visuals.creatures.jelly import Parts
 
 class AppScreen(Screen):
     """Provides state capturing methods and calls destroy on child widgets with
@@ -74,7 +75,7 @@ class JellyEnvironmentScreen(AppScreen):
         jelly_num = 1
         for store in load_all_jellies():
             for x in range(1):
-                Logger.debug('Creating Jelly %s', store['info']['id'])
+                Logger.debug('Creating Jelly %s', store.creature_id)
                 pos = random.randint(110, self.width - 110), random.randint(110, self.height - 110)
                 # pos = self.width/2.0, self.height/2.0
                 # angle = random.randint(-180, 180)
@@ -142,7 +143,7 @@ class JellySelectionScreen(AppScreen):
             return
 
         jelly_id = new_jelly(image_filepath)
-        App.get_running_app().open_screen('JellyDesignScreen', dict(jelly_id=jelly_id))
+        App.get_running_app().open_screen('JellyDesignScreen', jelly_id=jelly_id)
 
 
 class JellyDesignScreen(AppScreen):
@@ -159,4 +160,25 @@ class JellyDesignScreen(AppScreen):
         # TODO user popup message & undo option
         App.get_running_app().open_screen('JellySelectionScreen')
 
+    def add_part(self, part_name):
+        raise NotImplementedError()
+
+    def add_tentacles(self):
+        """Add a new tentacles group to the creature."""
+
+        # NOW: Tentacles UI
+        #android.image, then open constructor
+        # For every part, ask if cut
+        # Tentacles is the only group right now
+        cid = self.jelly_id
+        store = load_jelly_storage(self.jelly_id)
+        group_name = store.new_group(Parts.tentacles_group)
+
+        # Only want to open screen and create group if image selected
+        # def screen
+        # construction_screens.TentaclesConstructorScreen
+        # Must wait to import til runtime to avoid cyclic import issue
+        from .construction import TentaclesConstructorScreen
+        TentaclesConstructorScreen
+        # foo('hi', TentaclesConstructorScreen, creature_id=self.jelly_id)
 

@@ -57,13 +57,32 @@ def test_by_reference(creature_store):
     store.store_put('bar', o2)
     assert o2 is store['bar']
 
-def test_missing_group(creature_store):
-    with pytest.raises(ValueError):
-        creature_store.add_part('group/0/')
+def test_merge(creature_store):
+    with pytest.raises(KeyError):
+        creature_store.merge('foo', x=3)
 
-def test_bad_values(creature_store):
+    with pytest.raises(KeyError):
+        creature_store.merge('foo', 'bar', x=3)
+
+    creature_store['foo'] = {'x': 5, 'y': 3}
+    creature_store.merge('foo', y=7, z=44)
+    assert creature_store['foo'] == {'x': 5, 'y': 7, 'z': 44}
+
+    creature_store['foo']['bar'] = {'a': 1}
+    creature_store.merge('foo', 'bar', b=3)
+    assert creature_store['foo']['bar'] == {'a': 1, 'b': 3}
+
+    creature_store['foo']['list'] = []
+    with pytest.raises(AssertionError):
+        creature_store.merge('foo', 'list', x=2)
+
+def test_bad_creature_store_values(creature_store):
     with pytest.raises(ValueError):
         creature_store.add_part('foo/0')
+
+    with pytest.raises(ValueError):
+        # Missing group
+        creature_store.add_part('group/0/')
 
     with pytest.raises(ValueError):
         creature_store.add_part('foo/0/23/')
@@ -79,6 +98,7 @@ def test_bad_values(creature_store):
 
     with pytest.raises(ValueError):
         creature_store.new_group('')
+
 
 # FIXME
 # def test_construct_creature(self):
