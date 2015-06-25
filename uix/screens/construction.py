@@ -40,19 +40,19 @@ def constructor_class_for_part(name):
 class AnimationConstructorScreen(AppScreen):
     """Screen that for editing the Control Points of a Mesh.
     Provides UI to switch between animation_steps if set."""
-    state_attributes = ('jelly_id', 'animation_step', 'part_name')
+    state_attributes = ('creature_id', 'animation_step', 'part_name')
 
     animation_step = StringProperty(setup_step)
     # Selectable Animation Steps [(value, label), ...]
     animation_steps = ListProperty()
 
     def __init__(self, image_filepath=None, **kwargs):
-        # if 'jelly_id' not in kwargs:
-            # raise ValueError('Must specify jelly_id')
-        self.jelly_id = kwargs['jelly_id']
+        # if 'creature_id' not in kwargs:
+            # raise ValueError('Must specify creature_id')
+        self.creature_id = kwargs['creature_id']
         # The animation name to store the data under in the store, may be configured in future
         self.part_name = kwargs['part_name']
-        self.store = store = load_jelly_storage(self.jelly_id)
+        self.store = store = load_jelly_storage(self.creature_id)
         self.__animation_step_spinner = None
 
         super(AnimationConstructorScreen, self).__init__(**kwargs)

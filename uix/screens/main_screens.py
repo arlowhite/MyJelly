@@ -184,8 +184,8 @@ class JellySelectionScreen(AppScreen):
     def new_jelly(self):
         """Create a new jelly and open the design screen.
         """
-        jelly_id = new_jelly()
-        App.get_running_app().open_screen('JellyDesignScreen', jelly_id=jelly_id)
+        creature_id = new_jelly()
+        App.get_running_app().open_screen('JellyDesignScreen', creature_id=creature_id)
 
 
 class JellyDesignScreen(AppScreen):
@@ -195,7 +195,7 @@ class JellyDesignScreen(AppScreen):
 
     parts_layout = ObjectProperty(None)
 
-    state_attributes = ('jelly_id',)
+    state_attributes = ('creature_id',)
 
     _screen_for_part = {
         Parts.jelly_bell: 'JellyBellConstructorScreen',
@@ -206,13 +206,13 @@ class JellyDesignScreen(AppScreen):
     group_parts = (Parts.tentacles_group, )
 
     def __init__(self, **kwargs):
-        self.jelly_id = kwargs['jelly_id']
+        self.creature_id = kwargs['creature_id']
         super(JellyDesignScreen, self).__init__(**kwargs)
 
         # Load list of existing parts
         # TODO in future cool visual part selection screen
         from kivy.uix.button import Button
-        store = load_jelly_storage(self.jelly_id)
+        store = load_jelly_storage(self.creature_id)
         for part_instance_name in store.creature_constructors:
             # TODO labels?
             b = Button(text=part_instance_name, on_press=self.open_part_constructor)
@@ -227,14 +227,14 @@ class JellyDesignScreen(AppScreen):
         raise KeyError('No construction screen matches part name {}'.format(part_name))
 
     def delete_jelly(self):
-        delete_jelly(self.jelly_id)
+        delete_jelly(self.creature_id)
         # TODO user popup message & undo option
         App.get_running_app().open_screen('JellySelectionScreen')
 
     def open_part_constructor(self, button):
         pin = button.part_instance_name
         screen_name = self.screen_for_part(pin)
-        App.get_running_app().open_screen(screen_name, jelly_id=self.jelly_id, part_name=pin)
+        App.get_running_app().open_screen(screen_name, creature_id=self.creature_id, part_name=pin)
 
     def add_part(self, part_name):
         # Dismiss the ActionGroup or it will overlay the image selector
@@ -244,7 +244,7 @@ class JellyDesignScreen(AppScreen):
         # action_group._toggle_dropdown()
         action_group._dropdown.dismiss()
 
-        cid = self.jelly_id
+        cid = self.creature_id
         screen_for_part = self.screen_for_part
         group_parts = self.group_parts
 
@@ -261,7 +261,7 @@ class JellyDesignScreen(AppScreen):
 
             store.creature_constructors.append(part_instance_name)
 
-            app.open_screen(screen_name, jelly_id=cid, part_name=part_instance_name,
+            app.open_screen(screen_name, creature_id=cid, part_name=part_instance_name,
                             image_filepath=image_filepath)
 
         # part_name may actually be a group_name, but just make constructor screens use same kwarg

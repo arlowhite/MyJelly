@@ -73,7 +73,7 @@ class JellySelectButton(Button):
 
     def __init__(self, jelly_store, **kwargs):
         self.store = jelly_store
-        self.jelly_id = jelly_store.creature_id
+        self.creature_id = jelly_store.creature_id
         # Maybe no overall image, maybe image selection happens at parts?
         # self.image_filename = info['image_filepath']
 
@@ -89,10 +89,10 @@ class JellySelectButton(Button):
             # self.remove_widget(self.ids.image)
 
         except InsufficientData as ex:
-            Logger.info("Not enough data to preview Jelly %s: %s", self.jelly_id, ex.message)
+            Logger.info("Not enough data to preview Jelly %s: %s", self.creature_id, ex.message)
 
         except:
-            Logger.exception("Problem previewing Jelly %s within button", self.jelly_id)
+            Logger.exception("Problem previewing Jelly %s within button", self.creature_id)
             # raise
 
     def on_release(self):

@@ -116,8 +116,8 @@ def test_parts_loading(creature_store):
 #     app = MyJellyApp()
 #     app.run()
 #
-#     jelly_id = 'f6b069974318417183c7f820b86d7b99'
-#     store = load_jelly_storage(jelly_id)
+#     creature_id = 'f6b069974318417183c7f820b86d7b99'
+#     store = load_jelly_storage(creature_id)
 #     jelly = construct_creature(store)
 
 def test_adding_parts(creature_store):

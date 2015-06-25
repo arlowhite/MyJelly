@@ -386,8 +386,8 @@ def load_app_storage():
     return app_store
 
 
-def __jelly_json_path(jelly_id):
-    return P.join(get_jellies_dir(), jelly_id+'.json')
+def __jelly_json_path(creature_id):
+    return P.join(get_jellies_dir(), creature_id+'.json')
 
 # This should probably be somewhere else (maybe jelly.py?),
 # but this is as good a spot as any for now.
@@ -397,41 +397,42 @@ def new_jelly():
     # TODO If image used before, ask if want to open that Jelly
     # TODO Copy image file for safe keeping?
     # TODO check if image file
-    jelly_id = uuid4().hex
-    jelly = load_jelly_storage(jelly_id, new=True)
+    creature_id = uuid4().hex
+    jelly = load_jelly_storage(creature_id, new=True)
 
     jelly.store_sync()  # As soon as image is saved, save jelly state
-    return jelly_id
+    return creature_id
 
-def load_jelly_storage(jelly_id, new=False):
-    """Load the store for the given jelly_id, may be from cache.
-    :param jelly_id: id of the Creature to load.
+def load_jelly_storage(creature_id, new=False):
+    """Load the store from the jellies directory with the given creature_id
+     (may be from cached)
+    :param creature_id: id of the Creature to load.
     :param new: whether to create a new store.
     :rtype: CreatureStore
     :raises ValueError if store does not exist and new=False
     """
-    if jelly_id is None or len(jelly_id) < 1:
-        raise ValueError('Invalid jelly_id: %s', jelly_id)
+    if creature_id is None or len(creature_id) < 1:
+        raise ValueError('Invalid creature_id: %s', creature_id)
 
     # TODO use kivy.cache?
-    if jelly_id not in jelly_stores:
-        path = __jelly_json_path(jelly_id)
+    if creature_id not in jelly_stores:
+        path = __jelly_json_path(creature_id)
 
         new_store = not P.exists(path)
 
         if new_store:
             if not new:
-                raise ValueError('No creature with id %s'%jelly_id)
+                raise ValueError('No creature with id %s'%creature_id)
 
             Logger.debug('state_storage: Creating new store %s', path)
         else:
             if new:
-                raise AssertionError('new specified but creature already exists {}'.format(jelly_id))
+                raise AssertionError('new specified but creature already exists {}'.format(creature_id))
 
             Logger.debug('state_storage: Opening %s', path)
 
         try:
-            store = CreatureStore(path, creature_id=jelly_id)
+            store = CreatureStore(path, creature_id=creature_id)
             # CreatureStore will initialize if no info set
         except ValueError:
             # FIXME This is bad, should capture bad file for release
@@ -439,35 +440,35 @@ def load_jelly_storage(jelly_id, new=False):
             #os.remove(path)
             raise
 
-        jelly_stores[jelly_id] = store
+        jelly_stores[creature_id] = store
 
-    return jelly_stores[jelly_id]
+    return jelly_stores[creature_id]
 
 def load_all_jellies():
     jellies_dir = get_jellies_dir()
     # TODO sort jellies? last access?
     jellies = []
     for filename in os.listdir(jellies_dir):
-        jelly_id, ext = P.splitext(filename)
+        creature_id, ext = P.splitext(filename)
 
         if ext == '.json':
             try:
-                jellies.append(load_jelly_storage(jelly_id))
+                jellies.append(load_jelly_storage(creature_id))
             except ValueError:
-                Logger.error('Failed to load %s, will not be in all_jellies list', jelly_id)
+                Logger.error('Failed to load %s, will not be in all_jellies list', creature_id)
                 pass
         else:
             Logger.warning('state_storage: Non json file in jellies "%s"', filename)
 
     return jellies
 
-def delete_jelly(jelly_id):
-    if jelly_id in jelly_stores:
-        del jelly_stores[jelly_id]
+def delete_jelly(creature_id):
+    if creature_id in jelly_stores:
+        del jelly_stores[creature_id]
 
-    path = __jelly_json_path(jelly_id)
+    path = __jelly_json_path(creature_id)
     if P.exists(path):
-        Logger.info("Removing Jelly %s JSON: %s", jelly_id, path)
+        Logger.info("Removing Jelly %s JSON: %s", creature_id, path)
         os.remove(path)
 
 

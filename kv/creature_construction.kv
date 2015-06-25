@@ -41,7 +41,7 @@
 # Not sure why tweaks is always first
                 ActionButton:
                     text: 'Tweaks'
-                    on_press: app.open_screen('CreatureTweakScreen', creature_id=root.jelly_id)
+                    on_press: app.open_screen('CreatureTweakScreen', creature_id=root.creature_id)
 
                 ActionOverflow:
                     mode: 'spinner'
@@ -91,7 +91,7 @@
                 ActionPrevious:
                     title: 'Jelly Animator'
                     # FIXME Manage previous button
-                    on_press: app.open_screen('JellyDesignScreen', jelly_id=root.jelly_id)
+                    on_press: app.open_screen('JellyDesignScreen', creature_id=root.creature_id)
 
                 ActionButton:
                     icon: 'atlas://data/images/defaulttheme/previous_normal'
