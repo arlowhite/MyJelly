@@ -1,17 +1,21 @@
 __author__ = 'awhite'
 
 import random
+from types import TypeType
 
 from kivy.uix.screenmanager import Screen
 from kivy.app import App
 from kivy.utils import platform
 from kivy.logger import Logger
+from kivy.properties import StringProperty, ObjectProperty
+from kivy.uix.popup import Popup
 
 from uix.elements import JellySelectButton
 from uix.environment import BasicEnvironment
 from data.state_storage import load_all_jellies, load_jelly_storage, delete_jelly, \
     construct_creature, new_jelly
 from visuals.creatures.jelly import Parts
+from misc.util import not_none_keywords
 
 class AppScreen(Screen):
     """Provides state capturing methods and calls destroy on child widgets with
@@ -53,6 +57,62 @@ class AppScreen(Screen):
 
         # We always switch_to, which destroys old screens
         self.clear_widgets()
+
+def import_photo_then(title, obj, **kwargs):
+    """Show Import photo UI, then open screen or call callback if image selected.
+    :param callable or string function will be called with image_filepath argument. A string is assumed to
+    be a screen and will be opened with app.open_screen and image_filepath as a kwarg
+    :param kwargs keyword arguments for screen names
+    """
+    assert callable(obj)
+    app = App.get_running_app()
+
+    # if isinstance(obj, TypeType):
+    #     # Class of some kind, create a function that constructs it with kwargs
+    #     def func(image_filepath):
+    #         obj(image_filepath=image_filepath, **kwargs)
+    #
+    #     obj = func
+
+    if isinstance(obj, basestring):
+        def func(image_filepath):
+            app.open_screen(obj, image_filepath=image_filepath, **kwargs)
+
+        obj = func
+
+    # Could do Popup, but just stick with the Screen scheme for now
+    popup = ImportImagePopup(title=title, then=obj)
+    popup.open()
+
+# TODO select from previous creature images
+# TODO select from images used in any creature
+class ImportImagePopup(Popup):
+    """Provides UI for importing a photo from the file system
+    or TODO another creature/this creature
+    """
+
+    @not_none_keywords('then')
+    def __init__(self, then=None, **kwargs):
+        """
+        :param title: Text to display to user that provides context
+        :param then: callable to call with selected image_filepath
+        """
+
+        super(ImportImagePopup, self).__init__(**kwargs)
+        self.then = then
+
+    def on_import_gallery(self):
+        self.dismiss()
+        app = App.get_running_app()
+
+        if platform == 'android':
+            from misc import android_ui
+
+            android_ui.user_select_image(self.then)
+
+        else:
+            app.open_screen('KivyImageSelectScreen', then=self.then)
+
 
 class JellyEnvironmentScreen(AppScreen):
     """Living area for the Jelly where it moves around.
@@ -122,63 +182,87 @@ class JellySelectionScreen(AppScreen):
             grid.add_widget(JellySelectButton(jdata))
 
     def new_jelly(self):
-        """Launch the UI for the user to create a new jelly from a selected image.
-        On Android, uses native gallery picker Intent
+        """Create a new jelly and open the design screen.
         """
-        app = App.get_running_app()
-
-        if platform == 'android':
-            from misc import android_ui
-
-            android_ui.user_select_image(self.new_jelly_with_image)
-
-        else:
-            app.open_screen('NewJellyScreen')
-
-    def new_jelly_with_image(self, image_filepath):
-        """"""
-
-        if image_filepath is None:
-            # Nothing to do if user canceled selection
-            return
-
-        jelly_id = new_jelly(image_filepath)
+        jelly_id = new_jelly()
         App.get_running_app().open_screen('JellyDesignScreen', jelly_id=jelly_id)
 
 
 class JellyDesignScreen(AppScreen):
-    # menu to Bell, Tentacles, etc
+    """Provides UI to add new parts to a create and a selection of the created parts as well as
+    access to creature tweaks
+    """
+
+    parts_layout = ObjectProperty(None)
 
     state_attributes = ('jelly_id',)
+
+    _screen_for_part = {
+        Parts.jelly_bell: 'JellyBellConstructorScreen',
+        Parts.gooey_body: 'AnimationConstructorScreen',
+        Parts.tentacles_group: 'TentaclesConstructorScreen'
+    }
+
+    group_parts = (Parts.tentacles_group, )
 
     def __init__(self, **kwargs):
         self.jelly_id = kwargs['jelly_id']
         super(JellyDesignScreen, self).__init__(**kwargs)
+
+        # Load list of existing parts
+        # TODO in future cool visual part selection screen
+        from kivy.uix.button import Button
+        store = load_jelly_storage(self.jelly_id)
+        for part_instance_name in store.creature_constructors:
+            # TODO labels?
+            b = Button(text=part_instance_name, on_press=self.open_part_constructor)
+            b.part_instance_name = part_instance_name
+            self.parts_layout.add_widget(b)
+
+    def screen_for_part(self, part_name):
+        for name, screen_name in self._screen_for_part.viewitems():
+            if part_name.startswith(name):
+                return screen_name
+
+        raise KeyError('No construction screen matches part name {}'.format(part_name))
 
     def delete_jelly(self):
         delete_jelly(self.jelly_id)
         # TODO user popup message & undo option
         App.get_running_app().open_screen('JellySelectionScreen')
 
+    def open_part_constructor(self, button):
+        pin = button.part_instance_name
+        screen_name = self.screen_for_part(pin)
+        App.get_running_app().open_screen(screen_name, jelly_id=self.jelly_id, part_name=pin)
+
     def add_part(self, part_name):
-        raise NotImplementedError()
+        # Dismiss the ActionGroup or it will overlay the image selector
+        action_group = self.ids.add_part_action_group
+        # First two don't work. bug?
+        # action_group.is_open = False
+        # action_group._toggle_dropdown()
+        action_group._dropdown.dismiss()
 
-    def add_tentacles(self):
-        """Add a new tentacles group to the creature."""
-
-        # NOW: Tentacles UI
-        #android.image, then open constructor
-        # For every part, ask if cut
-        # Tentacles is the only group right now
         cid = self.jelly_id
-        store = load_jelly_storage(self.jelly_id)
-        group_name = store.new_group(Parts.tentacles_group)
+        screen_for_part = self.screen_for_part
+        group_parts = self.group_parts
 
-        # Only want to open screen and create group if image selected
-        # def screen
-        # construction_screens.TentaclesConstructorScreen
-        # Must wait to import til runtime to avoid cyclic import issue
-        from .construction import TentaclesConstructorScreen
-        TentaclesConstructorScreen
-        # foo('hi', TentaclesConstructorScreen, creature_id=self.jelly_id)
+        def callback(image_filepath):
+            app = App.get_running_app()
+            store = load_jelly_storage(cid)
 
+            screen_name = self.screen_for_part[part_name]
+
+            if part_name in group_parts:
+                part_instance_name = store.new_group(part_name)
+            else:
+                part_instance_name = store.add_part(part_name)
+
+            store.creature_constructors.append(part_instance_name)
+
+            app.open_screen(screen_name, jelly_id=cid, part_name=part_instance_name,
+                            image_filepath=image_filepath)
+
+        # part_name may actually be a group_name, but just make constructor screens use same kwarg
+        import_photo_then('Select image for {}'.format(part_name), callback)

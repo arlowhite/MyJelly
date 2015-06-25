@@ -15,17 +15,27 @@ from kivy.uix.actionbar import ActionButton
 
 from .main_screens import AppScreen
 from visuals.animations import setup_step
-from visuals.creatures.jelly import JellyBell, GooeyBodyPart
+from visuals.creatures.jelly import JellyBell, GooeyBodyPart, Tentacle, Parts
 from uix.environment import BasicEnvironment
 from uix.elements import LabeledSpinner
+from uix.animation_constructors import AnimationConstructor
 from data.state_storage import load_jelly_storage, \
     construct_creature, constructable_members, new_jelly, lookup_constructable
 from misc.util import not_none_keywords
 
-constructor_class_for_part = {
-    'jelly_bell': JellyBell,
-    'tentacles': GooeyBodyPart
+# Map Parts part_names to their constructors
+_parts_to_constructors = {
+    Parts.jelly_bell: JellyBell,
+    Parts.gooey_body: GooeyBodyPart,
+    Parts.tentacles_group: Tentacle
 }
+def constructor_class_for_part(name):
+    for part_base, constr in _parts_to_constructors.viewitems():
+        if name.startswith(part_base):
+            return constr
+
+    raise KeyError('No constructor match for part name {}'.format(name))
+
 
 class AnimationConstructorScreen(AppScreen):
     """Screen that for editing the Control Points of a Mesh.
@@ -36,38 +46,42 @@ class AnimationConstructorScreen(AppScreen):
     # Selectable Animation Steps [(value, label), ...]
     animation_steps = ListProperty()
 
-    @not_none_keywords('image_filepath')
     def __init__(self, image_filepath=None, **kwargs):
         # if 'jelly_id' not in kwargs:
             # raise ValueError('Must specify jelly_id')
         self.jelly_id = kwargs['jelly_id']
         # The animation name to store the data under in the store, may be configured in future
         self.part_name = kwargs['part_name']
-        assert self.part_name != 'bell_animation'  # FIXME remove old name check, 2nd below
-
-        store = load_jelly_storage(self.jelly_id)
-        self.store = store
-
+        self.store = store = load_jelly_storage(self.jelly_id)
         self.__animation_step_spinner = None
 
         super(AnimationConstructorScreen, self).__init__(**kwargs)
 
-        self.image_filepath = image_filepath
+        # self.image_filepath is set from store if exists there, otherwise must be provided
+        self.image_filepath = image_filepath  # may be None right now
 
+        # TODO Kivy docs recommend using a property instead of ids?
         anim_const = self.ids.animation_constructor
+        assert isinstance(anim_const, AnimationConstructor)
 
         # Part classes know how to setup AnimationConstructor from JSON structure
         # Determine the part class and call setup_anim_constr()
+        # Note: this is actually a part_instance_name
         part_name = self.part_name
+        class_path = None
         try:
             part_structure = store[part_name]
             class_path = part_structure.keys()[0]
-            constructable_members[class_path].setup_anim_constr(self, part_structure)
-
-        except KeyError:
+        except (KeyError, IndexError):
             # part was never edited before
+            if self.image_filepath is None:
+                raise AssertionError('part store is missing, but not provided image_filepath!')
+
             anim_const.image_filepath = self.image_filepath
-            pass
+
+        if class_path:
+            constructable_members[class_path].setup_anim_constr(self, part_structure)
+            assert self.image_filepath
 
         # Restore AnimationConstructor GUI state
         # FIXME Want to remember scale and pos even when opening Jelly fresh?
@@ -136,11 +150,10 @@ class AnimationConstructorScreen(AppScreen):
         # Probably refactor body part constructor GUI in reef game
         creature_constructors = store.creature_constructors
 
-        assert part_name != 'bell_animation'  # FIXME remove this old name check
         # Current design expects part name to be added to creature_constructors first
         # (Indicating new part is avaliable for editing by user)
         assert part_name in creature_constructors
-        constructor_class = constructor_class_for_part[part_name]
+        constructor_class = constructor_class_for_part(part_name)
 
         # The part in the store may have structure set by other components, such as tweaks
         # So this code should merge some parts rather than overwrite
@@ -184,16 +197,6 @@ class JellyBellConstructorScreen(AnimationConstructorScreen):
         self.animation_steps = zip(('__setup__', 'open_bell', 'closed_bell'),
                                    ('Setup', 'Open bell', 'Closed bell'))
 
-class ImportImageScreen(AppScreen):
-    "Provides choice o"
-
-    @not_none_keywords('title')
-    def __init__(self, title=None, creature_id=None):
-        """
-        :param title Text to display to user that provides context
-        """
-
-
 
 class TentaclesConstructorScreen(AppScreen):
     """UI for defining a Tentacle and its instances.
@@ -207,35 +210,20 @@ class TentaclesConstructorScreen(AppScreen):
 # FIXME save?
 
 
-def import_photo_then(title, obj, **kwargs):
-    """Show Import photo UI, then if photo is selected.
-    :param obj Class or function
-    function will be called with image_filepath argument. A Class will be given image_filepath kwarg.
-    :param kwargs keyword arguments for the Class
-    """
-    assert callable(obj)
-
-    if type(obj) is type:
-        # Class of some kind, create a function that constructs it with kwargs
-        def func(image_filepath):
-            obj(image_filepath=image_filepath, **kwargs)
-
-        obj = func
-
-    # Could do Popup, but just stick with the Screen scheme for now
-    # TODO select from previous creature images
-    # TODO select from images used in any creature
-    screen = ImportImageScreen(title=title, then=obj)
-    App.get_running_app()
-
-# Deprecated on Android
-class NewJellyScreen(AppScreen):
+# TODO maybe native linux selector and other OSes too
+# FIXME This screen cannot save state because of then
+class KivyImageSelectScreen(AppScreen):
     "Screen for selecting an image that creates a new jelly"
 
-    def __init__(self, **kwargs):
-        super(NewJellyScreen, self).__init__(**kwargs)
+    @not_none_keywords('then')
+    def __init__(self, then=None, **kwargs):
+        super(KivyImageSelectScreen, self).__init__(**kwargs)
 
         fc = self.ids.filechooser
+        if not callable(then):
+            raise ValueError('then is not callable')
+
+        self.then = then
 
         # TODO if os is android/linux/etc
         if platform=='android':
@@ -256,18 +244,14 @@ class NewJellyScreen(AppScreen):
 
         fc.bind(selection=self.on_selection)
 
-
-
     def on_selection(self, filechooser, files):
         # No multi-select
         if len(files) != 1:
-            Logger.warning('NewJellyScreen: selection with %d files'%len(files))
+            Logger.warning('{}: selection with {} files'.format(self.__class__.__name__, len(files)))
             return
 
         filepath = files[0]
-        jelly_id = new_jelly(filepath)
-
-        App.get_running_app().open_screen('JellyDesignScreen', jelly_id=jelly_id)
+        self.then(filepath)
 
 from kivy.uix.settings import SettingItem
 
@@ -379,7 +363,7 @@ class PartTweakScreen(Screen):
         return target_y
 
 
-
+# TODO highlight selected part, pulse?
 class CreatureTweakScreen(AppScreen):
     """Shows creature moving behind screen with various tweaks to adjust the body parts
     """

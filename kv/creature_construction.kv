@@ -2,6 +2,8 @@
 #:import AnimationConstructor uix.animation_constructors
 
 <JellyDesignScreen>:
+    parts_layout: parts_layout
+
     BoxLayout:
         orientation: 'vertical'
 
@@ -16,46 +18,61 @@
                     # FIXME Manage previous button
                     on_press: app.open_screen('JellySelectionScreen')
 
+# TODO dropdown auto_width working?
+# TODO instead a Popup with abstract icons would be better
                 ActionGroup:
+                    id: add_part_action_group
                     text: '+Add'
+                    mode: 'spinner'
 
                     ActionButton:
-                        text: 'Add Tentacle'
-                        on_press: root.add_tentacles()
+                        text: 'Umbrella'
+                        on_press: root.add_part('jelly_bell')
 
                     ActionButton:
-                        text: 'Add Gooey'
+                        text: 'Tentacles'
+                        on_press: root.add_part('tentacles')
 
+                    ActionButton:
+                    #manubrium?
+                        text: 'Gooey body'
+                        on_press: root.add_part('gooey_body')
 
+# Not sure why tweaks is always first
                 ActionButton:
-                    text: 'Delete'  # TODO Confirmation
-                    on_press: root.delete_jelly()
+                    text: 'Tweaks'
+                    on_press: app.open_screen('CreatureTweakScreen', creature_id=root.jelly_id)
+
+                ActionOverflow:
+                    mode: 'spinner'
+
+                    ActionButton:
+                        text: 'Delete'  # TODO Confirmation
+                        on_press: root.delete_jelly()
 
         BoxLayout:
+            id: parts_layout
             orientation: 'vertical'
 
-# TODO generate Buttons based on creature_constructors rather than hardcoding here
-            Button:
-                text: 'Animate Bell'
-                on_press:
-                    app.open_screen('JellyBellConstructorScreen',
-                    jelly_id=root.jelly_id, part_name='jelly_bell')
 
-            Button:
-                text: 'Outline Tentacles'
-                on_press:
-                    app.open_screen('AnimationConstructorScreen',
-                    jelly_id=root.jelly_id, part_name='tentacles')
+<ImportImagePopup>:
+    BoxLayout:
+        orientation: 'vertical'
+        Button:
+            text: 'Import from gallery'
+            size_hint_y: None
+            pos_hint: {'top': 1.0}
+            on_press: root.on_import_gallery()
 
-            Button:
-                text: 'Tentacle Test'
-                on_press:
-                    app.open_screen('Test',
-                    jelly_id=root.jelly_id, part_name='tentacle_test')
+        # take up space
+        Widget:
 
-            Button:
-                text: 'Tweaks'
-                on_press: app.open_screen('CreatureTweakScreen', creature_id=root.jelly_id)
+        Button:
+            text: 'Close'
+            size_hint: None, None
+            size: cm(3), cm(1.2)
+            pos_hint: {'center_x': 0.5}
+            on_press: root.dismiss()
 
 
 <AnimationConstructorScreen>:
@@ -66,7 +83,7 @@
 
         ActionBar:
             id: action_bar
-            top: root.top
+#            top: root.top FIXME remove i think
             size_hint_y: None
 
             ActionView:

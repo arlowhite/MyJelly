@@ -411,7 +411,7 @@ class CreatureBodyPart(EventDispatcher):
             space.add(o)
 
     def unbind_physics_space(self, space):
-        for o in reversed(self.phy_objects()):
+        for o in reversed(tuple(self.phy_objects())):
             space.remove(o)
 
     def translate(self, translation_vector):

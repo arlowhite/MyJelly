@@ -101,7 +101,10 @@ class CreatureStore(LazyJsonStore):
         # Convenience properties
         info = self.info
         self.creature_id = info['id']
-        self.creature_constructors = info['creature_constructors']
+
+        const = info['creature_constructors']
+        assert isinstance(const, list)
+        self.creature_constructors = const
 
     # NotE: decided NOT to put trailing slash on group names so that API's
     # return values can feed into other methods arguments
@@ -127,15 +130,29 @@ class CreatureStore(LazyJsonStore):
             num_slashes = name.count('/')
             last_slash_index = name.rfind('/')
             if num_slashes == 1:
-                parts[name[:last_slash_index]].append(name)
+                key = name[:last_slash_index]
+                if key not in parts:
+                    parts[key] = []
+
+                parts[key].append(name)
             elif num_slashes == 2:
                 # group/0 to group/0/0
-                group_instance_name = name[:last_slash_index]
-                parts[group_instance_name].append(name)
+                group_instance_name = name[:last_slash_index + 1]
+                if group_instance_name not in parts:
+                    parts[group_instance_name] = [name]
+                else:
+                    parts[group_instance_name].append(name)
 
                 # group to group/0
-                groups[group_instance_name[:group_instance_name.rfind('/') + 1]]\
-                    .append(group_instance_name)
+                key = group_instance_name[:group_instance_name.rfind('/', 0, -1) + 1]
+                if key not in groups:
+                    groups[key] = [group_instance_name]
+
+                else:
+                    # avoid duplicating group instance names in list
+                    group_instances = groups[key]
+                    if group_instance_name not in group_instances:
+                        group_instances.append(group_instance_name)
 
             else:
                 raise ValueError("Invalid store name '{}' has {} slashes"
@@ -352,7 +369,6 @@ class CreatureStore(LazyJsonStore):
         raise NotImplementedError()
 
 def get_jellies_dir():
-    global user_data_dir
     assert user_data_dir is not None
     jellies = P.join(user_data_dir, 'jellies')
     if not P.exists(jellies):
@@ -361,9 +377,8 @@ def get_jellies_dir():
     return jellies
 
 def load_app_storage():
-    global app_store, user_data_dir
     assert user_data_dir is not None
-
+    global app_store
     if app_store is None:
         Logger.debug('state_storage: Opening app.json')
         app_store = LazyJsonStore(P.join(user_data_dir, 'app.json'))
@@ -376,7 +391,7 @@ def __jelly_json_path(jelly_id):
 
 # This should probably be somewhere else (maybe jelly.py?),
 # but this is as good a spot as any for now.
-def new_jelly(image_filepath):
+def new_jelly():
     """Creates a new jelly store and id and returns the id"""
 
     # TODO If image used before, ask if want to open that Jelly
@@ -384,20 +399,20 @@ def new_jelly(image_filepath):
     # TODO check if image file
     jelly_id = uuid4().hex
     jelly = load_jelly_storage(jelly_id, new=True)
-    jelly.merge('_info', image_filepath=image_filepath)
-
-    # TODO This defines the parts available in the menu
-    # In the future user might change this list through the GUI to define optional parts
-    jelly.creature_constructors.extend(('jelly_bell', 'tentacles'))
 
     jelly.store_sync()  # As soon as image is saved, save jelly state
     return jelly_id
 
 def load_jelly_storage(jelly_id, new=False):
+    """Load the store for the given jelly_id, may be from cache.
+    :param jelly_id: id of the Creature to load.
+    :param new: whether to create a new store.
+    :rtype: CreatureStore
+    :raises ValueError if store does not exist and new=False
+    """
     if jelly_id is None or len(jelly_id) < 1:
         raise ValueError('Invalid jelly_id: %s', jelly_id)
 
-    global jelly_stores
     # TODO use kivy.cache?
     if jelly_id not in jelly_stores:
         path = __jelly_json_path(jelly_id)
@@ -410,6 +425,9 @@ def load_jelly_storage(jelly_id, new=False):
 
             Logger.debug('state_storage: Creating new store %s', path)
         else:
+            if new:
+                raise AssertionError('new specified but creature already exists {}'.format(jelly_id))
+
             Logger.debug('state_storage: Opening %s', path)
 
         try:

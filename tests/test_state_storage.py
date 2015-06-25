@@ -99,6 +99,16 @@ def test_bad_creature_store_values(creature_store):
     with pytest.raises(ValueError):
         creature_store.new_group('')
 
+def test_parts_loading(creature_store):
+    s = creature_store
+    s['foo/0'] = {}
+    s['group/0/0'] = {}
+    s['group/0/1'] = {}
+
+    s.add_part('foo')
+    assert s.parts['foo'] == ['foo/0', 'foo/1']
+    assert s.groups['group/'] == ['group/0/']
+    assert s.parts['group/0/'] == ['group/0/0', 'group/0/1']
 
 # FIXME
 # def test_construct_creature(self):

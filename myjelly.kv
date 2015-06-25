@@ -2,7 +2,7 @@
 #:include kv/creature_construction.kv
 #:include kv/tweaks.kv
 
-<NewJellyScreen>:
+<KivyImageSelectScreen>:
     BoxLayout:
         orientation: 'vertical'
 
@@ -47,7 +47,6 @@
                 ActionButton:
                     text: '+ New Jelly'
                     on_press: root.new_jelly()
-#                    on_press: app.open_screen('NewJellyScreen')
 
                 ActionButton:
                     text: 'Settings'
@@ -93,3 +92,6 @@
     halign: 'center'
     # FIXME No effect
     valign: 'middle'
+
+<ActionButton>:
+    padding: dp(16), dp(4)
