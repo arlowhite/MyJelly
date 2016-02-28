@@ -98,8 +98,10 @@ class MyJellyApp(App):
         name = screen['class_name']
         state = screen['state']
         Logger.info('main: restore_state, open_screen(%s, %s)'%(name, state))
-        self.open_screen(name, **state)
-
+        if state:
+            self.open_screen(name, **state)
+        else:
+            self.open_screen(name)
 
     # def on_start(self):
     #     # FIXME Is this called on resume? Best place for this code
