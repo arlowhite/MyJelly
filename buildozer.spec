@@ -35,7 +35,11 @@ version.filename = %(source.dir)s/main.py
 # (list) Application requirements
 # comma seperated e.g. requirements = sqlite3,kivy
 #requirements = kivy==master
-requirements = kivy, cymunk, android
+requirements = kivy==1.9.1, cymunk, android
+
+# (str) Custom source folders for requirements
+# Sets custom source for any requirements with recipes
+# requirements.source.kivy = ../../kivy
 
 # (list) Garden requirements
 #garden_requirements =
@@ -61,22 +65,24 @@ fullscreen = 1
 #android.permissions = INTERNET
 
 # (int) Android API to use
-android.api = 14
+#android.api = 19
 
 # (int) Minimum API required (8 = Android 2.2 devices)
-android.minapi = 8
+#android.minapi = 9
 
 # (int) Android SDK version to use
-android.sdk = 22
+# Note: buildozer 0.31 is at 20
+#android.sdk = 22
 
 # (str) Android NDK version to use
-android.ndk = 10d
+# Note: buildozer 0.31 is at 9c
+android.ndk = 10e
 
 # (bool) Use --private data storage (True) or --dir public storage (False)
 #android.private_storage = True
 
 # (str) Android NDK directory (if empty, it will be automatically downloaded.)
-android.ndk_path = /home/awhite/Apps/android-ndk-r10d
+android.ndk_path = /home/awhite/Apps/android-ndk-r10e
 
 # (str) Android SDK directory (if empty, it will be automatically downloaded.)
 android.sdk_path = /home/awhite/Apps/android-sdk-linux
