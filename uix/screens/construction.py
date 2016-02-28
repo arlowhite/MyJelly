@@ -80,6 +80,13 @@ class AnimationConstructorScreen(AppScreen):
             anim_const.image_filepath = self.image_filepath
 
         if class_path:
+            # Currently JellyBell and Gooey have this class method, but not Tentacles.
+            # So the current assumption is that if the part is constructed with an
+            # AnimationConstructorScreen (this class), the part class implements this.
+            # I have mixed feelings about this design, but putting this code on the part
+            # class seems as good as any other place. If implemented in this class,
+            # the code would either make major assumptions about parts taking the same
+            # kwargs, or have a switch statement for Parts. A bit ugly no matter what.
             constructable_members[class_path].setup_anim_constr(self, part_structure)
             assert self.image_filepath
 
@@ -197,17 +204,52 @@ class JellyBellConstructorScreen(AnimationConstructorScreen):
         self.animation_steps = zip(('__setup__', 'open_bell', 'closed_bell'),
                                    ('Setup', 'Open bell', 'Closed bell'))
 
+class TentacleConstruction(Tentacle):
+    """Provide UI to drag tentacle around and scale it.
+    Calculates the circles on scale, etc TODO
+
+    Blend in Scatter? no rotate
+    Focus, which makes Scatter bigger, or enables? pulse?
+    """
 
 class TentaclesConstructorScreen(AppScreen):
-    """UI for defining a Tentacle and its instances.
+    """UI for defining a bunch of Tentacle positions and scales.
+    Select part to anchor to.
+
 
     Drag out more tentacle copies, stretch
     Trash drag button
     """
-    # FIXME
-    pass
+    # Implementation?
+    # Just use Tentacle part
+    # Want to precalculate circles i think but the main issue is with scaling
+    # - When scaled, more bodies should be added, this can be calculated now and saved in structure for each
+    #copy
 
-# FIXME save?
+    # So what can they share? just tweaks? Probelm is circle_spacing tweak modifies another parameter, not
+    # a simple tweak so need new code? Actually adjust tweak can do it...However, a part now needs more
+    # knowledge about its store...which I wanted to avoid.
+
+    # Anchor choice
+    # Fixed to creature, default
+
+    ### Anchoring to bell ###
+    # Find closest two vertices in Mesh, in update interpolate between them and move Body
+
+    def __init__(self, image_filename=None, part_name=None, creature_id=None):
+
+        # Again, we have this if not loading from structure, require image_filename
+        # Consolidate this code/pattern
+
+        store = load_jelly_storage(creature_id)
+        # May be an empty dictionary
+        part_structure = store[part_name]
+
+
+
+
+
+
 
 
 # TODO maybe native linux selector and other OSes too

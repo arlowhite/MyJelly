@@ -237,6 +237,11 @@ class JellyDesignScreen(AppScreen):
         App.get_running_app().open_screen(screen_name, creature_id=self.creature_id, part_name=pin)
 
     def add_part(self, part_name):
+        """Add the given part name (from Parts) to the creature.
+        Opens import photo dialog as all parts start with an image.
+        If the user selects an image, Creates a new group or part instance in the store
+        and opens the appropriate part editor.
+        """
         # Dismiss the ActionGroup or it will overlay the image selector
         action_group = self.ids.add_part_action_group
         # First two don't work. bug?
@@ -252,7 +257,7 @@ class JellyDesignScreen(AppScreen):
             app = App.get_running_app()
             store = load_jelly_storage(cid)
 
-            screen_name = self.screen_for_part[part_name]
+            screen_name = screen_for_part(part_name)
 
             if part_name in group_parts:
                 part_instance_name = store.new_group(part_name)
