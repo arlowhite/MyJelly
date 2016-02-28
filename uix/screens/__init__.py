@@ -21,13 +21,13 @@ def _add_loaded(module):
 # Don't want to mess with __import__ for now, so just create these functions
 def _import_1():
     Logger.debug('screens: importing main_screens')
-    import screens.main_screens
-    _add_loaded(screens.main_screens)
+    import uix.screens.main_screens
+    _add_loaded(uix.screens.main_screens)
 
 def _import_2():
     Logger.debug('screens: importing construction')
-    import screens.construction
-    _add_loaded(screens.construction)
+    import uix.screens.construction
+    _add_loaded(uix.screens.construction)
 
 _screens_import_order=[_import_1, _import_2]
 
