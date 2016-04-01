@@ -18,3 +18,5 @@ I found the potential for an ECS architecture to address cross-cutting concerns 
 quickly becomes awkward when coding a game (and other large applications).
 However, converting to KivEnt would be a significant task at this point and I think a mature game engine such as Unity is
 a better choice if I decide to start over.
+
+![Jelly creation screenshot](https://raw.githubusercontent.com/arlowhite/MyJelly/master/MyJelly_creation.png)
