@@ -34,12 +34,13 @@ version.filename = %(source.dir)s/main.py
 
 # (list) Application requirements
 # comma seperated e.g. requirements = sqlite3,kivy
+# master fixes the buttons within ScrollView issue.
 #requirements = kivy==master
-requirements = kivy==1.9.1, cymunk, android
+requirements = kivy, cymunk, android
 
 # (str) Custom source folders for requirements
 # Sets custom source for any requirements with recipes
-# requirements.source.kivy = ../../kivy
+requirements.source.kivy = /home/awhite/Code/python/kivy/kivy-fork
 
 # (list) Garden requirements
 #garden_requirements =
@@ -76,13 +77,13 @@ fullscreen = 1
 
 # (str) Android NDK version to use
 # Note: buildozer 0.31 is at 9c
-android.ndk = 10e
+#android.ndk = 10e
 
 # (bool) Use --private data storage (True) or --dir public storage (False)
 #android.private_storage = True
 
 # (str) Android NDK directory (if empty, it will be automatically downloaded.)
-android.ndk_path = /home/awhite/Apps/android-ndk-r10e
+#android.ndk_path = /home/awhite/Apps/android-ndk-r10e
 
 # (str) Android SDK directory (if empty, it will be automatically downloaded.)
 android.sdk_path = /home/awhite/Apps/android-sdk-linux

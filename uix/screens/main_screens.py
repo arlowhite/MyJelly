@@ -134,10 +134,12 @@ class JellyEnvironmentScreen(AppScreen):
 
         jelly_num = 1
         for store in load_all_jellies():
+            # Number of each Jelly species
             for x in range(1):
                 Logger.debug('Creating Jelly %s', store.creature_id)
-                pos = random.randint(110, self.width - 110), random.randint(110, self.height - 110)
-                # pos = self.width/2.0, self.height/2.0
+                # FIXME Random position code needs to verify width > margin
+                #pos = random.randint(110, self.width - 110), random.randint(110, self.height - 110)
+                pos = self.width/2.0, self.height/2.0
                 # angle = random.randint(-180, 180)
                 angle = 90
                 j = construct_creature(store, pos=pos, angle=angle, phy_group_num=jelly_num)

@@ -9,7 +9,6 @@ _ = gettext.lgettext
 import random
 from math import cos, sin, radians, degrees, pi
 from collections import namedtuple, OrderedDict, Iterable
-from enum import Enum
 
 from kivy.logger import Logger
 from kivy.graphics import Color, Translate, PushMatrix, PopMatrix, \

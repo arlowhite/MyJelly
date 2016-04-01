@@ -12,7 +12,7 @@ gettext.textdomain('messages')
 _ = gettext.lgettext
 
 import kivy
-kivy.require('1.9.0')
+kivy.require('1.9.1')
 
 from kivy.config import Config
 #Config.set('graphics', 'fullscreen', '0')
